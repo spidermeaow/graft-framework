@@ -4,16 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/spidermeaow/graft-framework"
 	"github.com/spidermeaow/graft-framework/openapi"
-	"github.com/lib/pq"
 )
 
 type machine struct {
@@ -114,6 +113,9 @@ func application(db *sql.DB) *graft.App {
 }
 
 func run() error {
+	if err := graft.LoadEnv(); err != nil {
+		return err
+	}
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		return errors.New("DATABASE_URL is required; see the example README")
@@ -135,11 +137,11 @@ func run() error {
 	if port == "" {
 		port = "8080"
 	}
+	graft.PrintStartup(port)
 	return application(db).Run(":" + port)
 }
 func main() {
 	if err := run(); err != nil {
-		slog.Error("application stopped", "error", err)
-		os.Exit(1)
+		graft.Fatal(err)
 	}
 }

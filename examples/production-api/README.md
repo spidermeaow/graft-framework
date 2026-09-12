@@ -16,7 +16,9 @@ export DATABASE_URL='postgres://postgres:postgres@localhost:5432/machines?sslmod
 
 Create the `machines` database first. The user needs DDL privileges for migrations.
 On Windows build `bin/graft.exe`, then use `../../bin/graft.exe` and set the variable
-with `$env:DATABASE_URL='...'`. `.env.example` is not loaded automatically.
+with `$env:DATABASE_URL='...'`. Alternatively copy `.env.example` to `.env` and edit
+it. The application and migration CLI load `.env` from the working directory;
+existing shell environment variables take precedence.
 
 ```sh
 curl -X POST localhost:8080/api/machines \

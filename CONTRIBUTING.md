@@ -22,6 +22,8 @@ Set GRAFT_TEST_DATABASE_URL to enable the PostgreSQL integration tests. CI inclu
 this environment. Run benchmarks when changing request-path behavior, and test
 generated projects when changing the CLI. Do not commit bin/, publish/ or .tmp/.
 
-Release preparation includes deciding the repository's license, confirming the
+Graft uses the MIT License. Release preparation includes confirming the
 canonical remote/module path, tagging a version, checking generated projects with
 that published version, and retaining bundled third-party license notices.
+
+See docs/RELEASING.md for installation channels and legacy-project migration.

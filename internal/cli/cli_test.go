@@ -28,10 +28,25 @@ func TestArguments(t *testing.T) {
 	}
 }
 
+func TestExplicitVersionUsesPublishedModule(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"new", "--download=false", "--version", "v0.2.0", "remote-api"}, &out, &out); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("remote-api/go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "replace") || !strings.Contains(string(data), "v0.2.0") {
+		t.Fatal(string(data))
+	}
+}
+
 func TestProjectGenerationAndBuild(t *testing.T) {
-	source := localFramework()
-	if source == "" {
-		t.Fatal("source checkout not found")
+	source, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
 	}
 	t.Chdir(t.TempDir())
 	var out bytes.Buffer
@@ -45,8 +60,11 @@ func TestProjectGenerationAndBuild(t *testing.T) {
 		}
 	}
 	b, err := os.ReadFile("hello-api/go.mod")
-	if err != nil || !strings.Contains(string(b), "module example.com/hello") || !strings.Contains(string(b), "replace github.com/spidermeaow/graft-framework") {
+	if err != nil || !strings.Contains(string(b), "module example.com/hello") || strings.Contains(string(b), "// graft: embedded-framework") || !strings.Contains(string(b), "replace github.com/spidermeaow/graft-framework") {
 		t.Fatal(string(b), err)
+	}
+	if _, err := os.Stat("hello-api/.graft"); !os.IsNotExist(err) {
+		t.Fatalf("generated .graft directory: %v", err)
 	}
 	if err := Run(context.Background(), args, &out, &out); err == nil {
 		t.Fatal("overwrote existing project")
@@ -61,6 +79,11 @@ func TestProjectGenerationAndBuild(t *testing.T) {
 	if info, err := os.Stat(output); err != nil || info.Size() == 0 {
 		t.Fatal(info, err)
 	}
+	for _, name := range []string{".env.example", "README.md"} {
+		if _, err := os.Stat(filepath.Join(filepath.Dir(output), name)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +95,16 @@ func TestProjectGenerationAndBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	process := exec.CommandContext(ctx, binary)
-	process.Env = replaceEnv(os.Environ(), "APP_PORT", fmt.Sprint(port))
+	if err := os.WriteFile(".env", []byte(fmt.Sprintf("APP_PORT=%d\n", port)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	process.Env = []string{}
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if !strings.EqualFold(key, "APP_PORT") {
+			process.Env = append(process.Env, entry)
+		}
+	}
 	if err := process.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +153,20 @@ func TestTargets(t *testing.T) {
 	env := replaceEnv([]string{"GOOS=wrong", "Path=kept", "goos=also_wrong"}, "GOOS", "linux")
 	if strings.Join(env, ";") != "Path=kept;GOOS=linux" {
 		t.Fatal(env)
+	}
+}
+
+func TestDevURLs(t *testing.T) {
+	for _, tt := range []struct {
+		port, app, swagger string
+	}{
+		{"", "http://localhost:8080", "http://localhost:8080/swagger"},
+		{"4567", "http://localhost:4567", "http://localhost:4567/swagger"},
+	} {
+		app, swagger := devURLs(tt.port)
+		if app != tt.app || swagger != tt.swagger {
+			t.Fatalf("devURLs(%q) = %q, %q", tt.port, app, swagger)
+		}
 	}
 }
 

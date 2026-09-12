@@ -1,13 +1,21 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/spidermeaow/graft-framework"
 )
 
 func main() {
+	if err := run(); err != nil {
+		graft.Fatal(err)
+	}
+}
+
+func run() error {
+	if err := graft.LoadEnv(); err != nil {
+		return err
+	}
 	app := graft.New()
 	app.Use(graft.RequestID(), graft.Logger(), graft.Recovery())
 	app.GET("/{$}", func(c *graft.Context) error {
@@ -18,7 +26,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	if err := app.Run(":" + port); err != nil {
-		log.Fatal(err)
-	}
+	graft.PrintStartup(port)
+	return app.Run(":" + port)
 }

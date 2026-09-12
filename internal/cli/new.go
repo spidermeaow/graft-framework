@@ -2,15 +2,15 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"text/template"
@@ -23,11 +23,12 @@ var projectName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 var moduleName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._~/-]*$`)
 var versionName = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$`)
 
-func newProject(args []string, out, errOut io.Writer) error {
+func newProject(ctx context.Context, args []string, out, errOut io.Writer) error {
 	f := flags("new", errOut)
 	module := f.String("module", "", "Go module path")
-	framework := f.String("framework", localFramework(), "local framework checkout; empty uses published module")
-	version := f.String("version", "v0.1.0", "framework module version")
+	framework := f.String("framework", "", "local framework checkout")
+	version := f.String("version", frameworkVersion(), "framework module version")
+	download := f.Bool("download", true, "resolve dependencies with go mod tidy (false generates files only)")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -55,7 +56,9 @@ func newProject(args []string, out, errOut io.Writer) error {
 		}
 		replace = "\nreplace github.com/spidermeaow/graft-framework => " + strconv.Quote(filepath.ToSlash(path)) + "\n"
 	}
-	data := struct{ Name, Module, Version, Replace string }{name, *module, *version, replace}
+	data := struct {
+		Name, Module, Version, Replace string
+	}{name, *module, *version, replace}
 	files := map[string]string{"main.go.tmpl": "cmd/api/main.go", "go.mod.tmpl": "go.mod", "README.md.tmpl": "README.md", "env.tmpl": ".env.example", "gitignore.tmpl": ".gitignore"}
 	// Render before making any filesystem changes; a pre-existing target is never overwritten.
 	rendered := map[string][]byte{}
@@ -87,6 +90,15 @@ func newProject(args []string, out, errOut io.Writer) error {
 			return err
 		}
 	}
+	if *download {
+		cmd := exec.CommandContext(ctx, "go", "mod", "tidy")
+		cmd.Dir = name
+		cmd.Env = replaceEnv(os.Environ(), "GOWORK", "off")
+		cmd.Stdout, cmd.Stderr = out, errOut
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("project created in %s, but dependency setup failed: %w; ensure Go is installed and framework %s is published, then run go mod tidy inside the project", name, err, *version)
+		}
+	}
 	fmt.Fprintf(out, "Created %s\n\n  cd %s\n  graft dev\n", name, name)
 	if replace != "" {
 		fmt.Fprintln(out, "Using local Graft checkout:", *framework)
@@ -101,18 +113,4 @@ func isFramework(path string) bool {
 	}
 	fields := strings.Fields(string(b))
 	return len(fields) >= 2 && fields[0] == "module" && fields[1] == "github.com/spidermeaow/graft-framework"
-}
-
-func localFramework() string {
-	// Only development binaries infer a local replacement. Tagged installs use the module proxy.
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return ""
-	}
-	if _, source, _, ok := runtime.Caller(0); ok {
-		path := filepath.Clean(filepath.Join(filepath.Dir(source), "../.."))
-		if isFramework(path) {
-			return path
-		}
-	}
-	return ""
 }

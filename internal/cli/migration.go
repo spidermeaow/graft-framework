@@ -15,9 +15,10 @@ import (
 	"text/tabwriter"
 	"time"
 
+	_ "github.com/lib/pq" // PostgreSQL wire protocol, kept out of the HTTP core.
+	"github.com/spidermeaow/graft-framework"
 	"github.com/spidermeaow/graft-framework/migration"
 	"github.com/spidermeaow/graft-framework/migration/postgres"
-	_ "github.com/lib/pq" // PostgreSQL wire protocol, kept out of the HTTP core.
 )
 
 var migrationName = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -55,6 +56,9 @@ func migrationCommand(ctx context.Context, command string, args []string, out, e
 	}
 	migrations, err := migration.Load(os.DirFS(*dir), ".")
 	if err != nil {
+		return err
+	}
+	if err := graft.LoadEnv(); err != nil {
 		return err
 	}
 	dsn := os.Getenv("DATABASE_URL")

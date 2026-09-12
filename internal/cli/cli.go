@@ -11,13 +11,20 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+
+	"github.com/spidermeaow/graft-framework"
+	"github.com/spidermeaow/graft-framework/internal/frameworkbundle"
 )
 
 const usage = `Graft — Write Routes. Migrate. Document. Ship.
 
 Usage:
+  graft version
+  graft install [--dir path] [--no-path]
   graft new [--module name] [--framework local-path] [--version v0.1.0] project-name
+  graft upgrade-project --version v0.1.0 [--apply]
   graft dev [--package ./cmd/api]
   graft build [--package ./cmd/api] [--output path]
   graft publish --target linux-x64 [--package ./cmd/api] [--output path]
@@ -38,8 +45,14 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	}
 	var err error
 	switch args[0] {
+	case "install":
+		err = installCommand(ctx, args[1:], out, errOut)
+	case "version", "--version", "-v":
+		err = versionCommand(args[1:], out, errOut)
 	case "new":
-		err = newProject(args[1:], out, errOut)
+		err = newProject(ctx, args[1:], out, errOut)
+	case "upgrade-project":
+		err = upgradeProject(ctx, args[1:], out, errOut)
 	case "dev", "build", "publish":
 		err = goCommand(ctx, args[0], args[1:], out, errOut)
 	case "make:migration", "migrate", "migrate:status", "migrate:rollback":
@@ -90,7 +103,15 @@ func goCommand(ctx context.Context, command string, args []string, out, errOut i
 	if strings.HasPrefix(*pkg, "-") {
 		return errors.New("invalid package")
 	}
+	if command == "dev" {
+		if err := graft.LoadEnv(); err != nil {
+			return err
+		}
+	}
 	env := os.Environ()
+	if err := ensureEmbeddedWorkspace(); err != nil {
+		return err
+	}
 	goos := runtime.GOOS
 	if command == "publish" {
 		pair, ok := targets[target]
@@ -103,6 +124,11 @@ func goCommand(ctx context.Context, command string, args []string, out, errOut i
 		env = replaceEnv(env, "CGO_ENABLED", "0")
 	}
 	if command == "dev" {
+		appURL, swaggerURL := devURLs(os.Getenv("APP_PORT"))
+		fmt.Fprintln(out, "Starting development server")
+		fmt.Fprintln(out, "  App:    ", appURL)
+		fmt.Fprintln(out, "  Swagger:", swaggerURL)
+		fmt.Fprintln(out, "Press Ctrl+C to stop.")
 		return runGo(ctx, env, out, errOut, "run", *pkg)
 	}
 	if output == "" {
@@ -114,11 +140,7 @@ func goCommand(ctx context.Context, command string, args []string, out, errOut i
 		if goos == "windows" {
 			name += ".exe"
 		}
-		dir := "bin"
-		if command == "publish" {
-			dir = "publish"
-		}
-		output = filepath.Join(dir, name)
+		output = filepath.Join("bin", name)
 	}
 	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
 		return err
@@ -126,8 +148,65 @@ func goCommand(ctx context.Context, command string, args []string, out, errOut i
 	if err := runGo(ctx, env, out, errOut, "build", "-trimpath", "-o", output, *pkg); err != nil {
 		return err
 	}
+	if err := copyBuildCompanions(output); err != nil {
+		return err
+	}
 	fmt.Fprintln(out, "Built", output)
 	return nil
+}
+
+func copyBuildCompanions(output string) error {
+	for _, name := range []string{".env.example", "README.md"} {
+		data, err := os.ReadFile(name)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(filepath.Dir(output), name), data, 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func devURLs(port string) (app, swagger string) {
+	if port == "" {
+		port = "8080"
+	}
+	app = "http://localhost:" + port
+	return app, app + "/swagger"
+}
+
+func ensureEmbeddedWorkspace() error {
+	data, err := os.ReadFile("go.mod")
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(string(data), "// graft: embedded-framework") {
+		return nil
+	}
+	framework, err := frameworkbundle.Cache()
+	if err != nil {
+		return fmt.Errorf("prepare embedded framework: %w", err)
+	}
+	path := "go.work"
+	current, err := os.ReadFile(path)
+	if err == nil && !strings.Contains(string(current), "// graft: embedded-framework") {
+		return nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.WriteFile(path, []byte(embeddedWorkspace(framework)), 0644)
+}
+
+func embeddedWorkspace(framework string) string {
+	return "go 1.26.6\n\n// graft: embedded-framework\nuse .\n\nreplace github.com/spidermeaow/graft-framework => " + strconv.Quote(filepath.ToSlash(framework)) + "\n"
 }
 
 func replaceEnv(env []string, key, value string) []string {

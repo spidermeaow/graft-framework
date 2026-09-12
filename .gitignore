@@ -15,3 +15,4 @@ coverage.*
 profile.cov
 go.work
 go.work.sum
+/cmd/setup/payload/

@@ -14,8 +14,8 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/spidermeaow/graft-framework/migration"
 	_ "github.com/lib/pq"
+	"github.com/spidermeaow/graft-framework/migration"
 )
 
 // Each integration test creates and later drops only its own uniquely named database.

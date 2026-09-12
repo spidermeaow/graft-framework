@@ -1,0 +1,158 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: graft
+          POSTGRES_PASSWORD: graft_test
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U graft"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GRAFT_TEST_DATABASE_URL: postgres://graft:graft_test@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Validate release source
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]
+          test -s LICENSE
+          git ls-files --error-unmatch internal/frameworkbundle/framework.zip
+          go run ./internal/cmd/bundle
+          git diff --exit-code -- internal/frameworkbundle/framework.zip
+          go mod verify
+          go test -race ./...
+          go vet ./...
+  windows:
+    needs: verify
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Package
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_ARCH: ${{ matrix.arch }}
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+          ./scripts/package-windows.ps1 -Architecture $env:RELEASE_ARCH -Version $env:RELEASE_TAG
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          $packageDir = "publish/graft-windows-$env:RELEASE_ARCH"
+          Copy-Item LICENSE, README.md -Destination $packageDir
+          Copy-Item licenses -Destination $packageDir -Recurse
+          Copy-Item internal/swaggerui/assets/LICENSE "$packageDir/licenses/swagger-ui-LICENSE"
+          Copy-Item internal/swaggerui/assets/NOTICE "$packageDir/licenses/swagger-ui-NOTICE"
+          Copy-Item internal/swaggerui/assets/swagger-ui-bundle.js.LICENSE.txt "$packageDir/licenses/swagger-ui-bundle-LICENSE.txt"
+          Copy-Item "$packageDir/Setup.exe" "release-assets/Graft-Setup-$env:RELEASE_TAG-windows-$env:RELEASE_ARCH.exe"
+          Compress-Archive -Path "$packageDir/graft.exe", "$packageDir/LICENSE", "$packageDir/README.md", "$packageDir/licenses" -DestinationPath "release-assets/graft-$env:RELEASE_TAG-windows-$env:RELEASE_ARCH.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: release-assets/*
+          if-no-files-found: error
+  unix:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, darwin]
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p package release-assets
+          go build -trimpath -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=$RELEASE_TAG" -o package/graft ./cmd/graft
+          cp LICENSE README.md package/
+          cp -r licenses package/
+          cp internal/swaggerui/assets/LICENSE package/licenses/swagger-ui-LICENSE
+          cp internal/swaggerui/assets/NOTICE package/licenses/swagger-ui-NOTICE
+          cp internal/swaggerui/assets/swagger-ui-bundle.js.LICENSE.txt package/licenses/swagger-ui-bundle-LICENSE.txt
+          tar -czf "release-assets/graft-$RELEASE_TAG-$GOOS-$GOARCH.tar.gz" -C package graft LICENSE README.md licenses
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.arch }}
+          path: release-assets/*
+          if-no-files-found: error
+  module-smoke:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install tagged CLI and test generated application
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          export GOBIN="$RUNNER_TEMP/graft-cli"
+          export GOWORK=off
+          for attempt in 1 2 3 4 5; do
+            if go install "github.com/spidermeaow/graft-framework/cmd/graft@$RELEASE_TAG"; then break; fi
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            sleep 15
+          done
+          cd "$RUNNER_TEMP"
+          "$GOBIN/graft" version
+          "$GOBIN/graft" new release-check
+          cd release-check
+          test ! -e go.work
+          test ! -e .graft
+          go test ./...
+          "$GOBIN/graft" build
+          APP_PORT=18987 ./bin/release-check > server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://localhost:18987/swagger
+  publish:
+    needs: [windows, unix, module-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Publish verified release
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          sha256sum *.zip *.tar.gz *.exe > SHA256SUMS.txt
+          gh release create "$RELEASE_TAG" --verify-tag --title "Graft $RELEASE_TAG" --generate-notes ./*

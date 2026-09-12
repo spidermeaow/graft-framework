@@ -7,14 +7,134 @@ OpenAPI/Swagger documentation, and native deployment. It uses `net/http`,
 `http.ServeMux`, `database/sql`, `log/slog`, and the standard Go toolchain.
 There is no ORM, DI container, or required application architecture.
 
+Free and open source under the [MIT License](LICENSE).
+
+## Install and start
+
+Install Go 1.26.6 or newer on the development machine. Choose either the Windows
+Setup from [GitHub Releases](https://github.com/spidermeaow/graft-framework/releases/latest) or:
+
+```sh
+go install github.com/spidermeaow/graft-framework/cmd/graft@v0.1.0
+graft new my-api
+cd my-api
+graft dev
+```
+
+Both installations run the same CLI. `graft new` resolves dependencies and creates
+`go.mod` and `go.sum`; the first download needs network access. Add Go's bin
+directory to PATH if `graft` is not found after `go install`.
+
+To use only the library in an existing Go module:
+
+```sh
+go get github.com/spidermeaow/graft-framework@v0.1.0
+```
+
+For framework development, use `graft new --framework <absolute-checkout-path> my-api`.
+`graft new --download=false my-api` generates files without invoking Go;
+run `go mod tidy` later inside that project.
+
 ## Start from this checkout
+
+### Send a standalone Windows CLI to another computer
+
+Build the redistributable executable from this checkout:
+
+```powershell
+.\scripts\package-windows.ps1
+# For Windows ARM64: .\scripts\package-windows.ps1 -Architecture arm64
+```
+
+Send **`publish/graft-windows-amd64/graft.exe`** to the destination Windows PC.
+Alternatively send **`publish/graft-windows-amd64/Setup.exe`** alone. Double-click
+Setup.exe and confirm the installation dialog. It embeds the same CLI, installs
+for the current user, and adds User PATH. Restart terminal applications afterward.
+For automated deployment: `Setup.exe --silent`; optional `--dir <path>` and
+`--no-path` are supported. Both files are unsigned Windows executables.
+No source checkout or companion installer is needed. In PowerShell there:
+
+```powershell
+.\graft.exe version
+.\graft.exe install
+```
+
+Installation copies the executable into `%LOCALAPPDATA%\Graft\bin` and adds it to
+User PATH without administrator privileges. Restart terminal applications, then
+use either CMD or PowerShell:
+
+```text
+graft version
+graft new my-api
+cd my-api
+graft dev
+```
+
+`install --dir <path>` changes the location; `install --no-path` copies only the
+executable. Installation is explicit: running without arguments displays help.
+Updating an existing installation requires closing other running Graft commands.
+The installer uses the Windows-provided PowerShell to update User PATH. It cannot
+alter the parent terminal's environment; restart terminals or set PATH in that
+session manually. No machine-wide PATH or execution-policy change is made.
+
+The CLI can display version/help and run migration commands without Go installed.
+Generation with `--download=false` also works without Go. **Normal project setup,
+development and compilation require Go 1.26.6+.**
+Database commands need access to PostgreSQL. Only published application binaries
+are independent of both Go and Graft.
+
+New projects use a versioned public Go module. No `.graft` directory, custom cache
+or generated `go.work` is required. `go test`, `go build` and VS Code work with the
+same dependency graph. The CLI retains an embedded snapshot only for compatibility
+with older embedded projects. `--framework <path>` selects local source explicitly.
+
+The Windows package script regenerates `internal/frameworkbundle/framework.zip`
+before building. If building a standalone CLI manually, run
+`go run ./internal/cmd/bundle` first, then `go build -trimpath -o graft.exe ./cmd/graft`.
+The bundle includes the upstream Swagger UI license notices. Published binaries
+are currently unsigned; no Windows code-signing certificate is configured.
 
 Requires Go 1.26.6 or later. PostgreSQL is needed only for database applications
 and migration commands.
 
+### Install the Windows CLI
+
+From this checkout in PowerShell:
+
+```powershell
+.\scripts\install.ps1
+graft version
+graft new my-api
+cd my-api
+graft dev
+```
+
+The installer builds `graft.exe` into `%LOCALAPPDATA%\Graft\bin` and adds that
+directory to your **user PATH**, without administrator privileges. It also updates
+the current PowerShell session. Restart existing CMD/terminal applications so new
+shells inherit PATH. Both PowerShell and CMD can then run `graft` from any folder.
+If your organization's policy blocks PowerShell scripts, use the manual build
+below and add its binary directory to your user PATH through Windows settings.
+
+`graft version` (also `--version` or `-v`) reports the CLI version, Go version and
+platform. Local development builds report `0.1.0-dev`; published `go install`
+builds use their module version. Release builds may set it explicitly:
+
+```powershell
+go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.1.0" -o bin/graft.exe ./cmd/graft
+```
+
+Re-run the installer after updating this checkout. `-InstallDir <path>` changes
+the destination; `-NoPath` installs only the executable. Keep this checkout at its
+current location while generated applications use its local `replace` directive.
+This source installer requires Go; development/build commands also require Go.
+Published application binaries themselves require no Go or Graft installation.
+
+### Run without installing
+
 ```sh
 go build -o bin/graft ./cmd/graft
-./bin/graft new hello-api
+./bin/graft new --framework . hello-api
 cd hello-api
 ../bin/graft dev
 ```
@@ -23,16 +143,15 @@ Windows PowerShell:
 
 ```powershell
 go build -o bin/graft.exe ./cmd/graft
-./bin/graft.exe new hello-api
+./bin/graft.exe new --framework . hello-api
 cd hello-api
 ../bin/graft.exe dev
 ```
 
 Open http://localhost:8080, http://localhost:8080/swagger and
 http://localhost:8080/openapi.json. Add the CLI to PATH to use `graft` directly.
-Development CLI builds infer this checkout and add an explicit `replace` to the
-generated go.mod. Use `--framework /path/to/graft-framework` if the binary was
-built with `-trimpath` or moved away from its source.
+Use `--framework /path/to/graft-framework` to add an explicit local `replace` when
+developing the framework before its first public release.
 
 The public module identity is `github.com/spidermeaow/graft-framework`. After a
 version tag has been published, onboarding can use:
@@ -45,6 +164,11 @@ graft new hello-api
 For a different hosting namespace, update the module path and generator imports
 before release. `new --module example.com/my-api` names the application module;
 `--version` selects a published framework version.
+
+For old embedded/local projects, see [migration and release instructions](docs/RELEASING.md).
+`graft upgrade-project --version v0.1.0` previews the migration; adding `--apply`
+verifies, backs up and updates dependency files. Updating the CLI alone does not
+change the framework version pinned in a standard project's `go.mod`.
 
 ## Write routes
 
@@ -114,7 +238,36 @@ Use a custom http.Server for TLS or different streaming/timeouts requirements.
 
 ## SQL-first migrations
 
-Set DATABASE_URL explicitly; `.env.example` is documentation, not auto-loaded.
+Copy `.env.example` to `.env` in the project root and edit your database connection:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+graft migrate
+```
+
+The CLI loads `.env` for migrate, migrate:status, migrate:rollback and dev.
+Newly generated applications call `graft.LoadEnv()` before reading configuration,
+so their compiled binaries read `.env` beside the executable, including when launched
+from another working directory. They also read `.env` in the working directory; that
+file takes precedence if both exist. The files are optional; existing process variables
+win, even if set to an empty string. Restart the app after editing it. Graft never
+loads `.env.example` or searches parent directories. Keep `.env` out of version
+control; generated .gitignore covers it.
+
+Supported syntax: KEY=value, optional export, blank lines, # comments, single-quoted
+literal values and double-quoted escaped values such as `"line1\nline2"`. Unquoted
+inline comments require whitespace before #. Values are not interpolated or executed;
+multiline quoted values are not supported. Invalid syntax reports filename and line
+without echoing secrets. Database names must already exist; credentials in database
+URLs must use URL encoding where required.
+
+Existing projects can immediately use `.env` with an updated CLI for migrations
+and `graft dev`. For existing compiled applications, update their framework dependency
+and add `graft.LoadEnv()` at startup before reading environment variables, then rebuild.
+Installing a new CLI does not modify source snapshots in older generated projects.
+
+You may still set DATABASE_URL explicitly in the shell:
 
 ```sh
 export DATABASE_URL='postgres://user:password@localhost:5432/app?sslmode=disable'
@@ -211,8 +364,9 @@ graft build
 graft publish --target linux-x64
 ```
 
-Build writes `bin/<project>` (or `.exe` on Windows). Publish writes
-`publish/<project>` with CGO_ENABLED=0, GOOS and GOARCH selected from:
+Build and publish write `bin/<project>` (or `.exe` on Windows), plus a copy of
+`.env.example` and `README.md` beside the binary. Publish sets CGO_ENABLED=0,
+GOOS and GOARCH selected from:
 
 | Target | GOOS | GOARCH |
 | --- | --- | --- |
@@ -225,8 +379,11 @@ Build writes `bin/<project>` (or `.exe` on Windows). Publish writes
 
 Use `--output path` to keep builds for multiple targets and `--package` to select a
 main package. Default package is ./cmd/api when it exists, otherwise the current
-directory. `graft dev` delegates to `go run`; no hot reload in v0.1.
-Copy the published binary to the target server, set environment variables and run.
+directory. `graft dev` delegates to `go run`; no hot reload in v0.1. Generated
+applications print their App and Swagger URLs at startup. On Windows, a startup
+error is also shown in a dialog so a double-clicked executable does not disappear
+before the error can be read. Copy the binary and companion files to the target
+server, copy `.env.example` to `.env`, set environment variables and run.
 No Graft runtime or Docker is required. Apps using cgo can use normal Go tooling.
 
 See [Machines API](examples/production-api/README.md) for PostgreSQL-backed routes,
