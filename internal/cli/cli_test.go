@@ -156,17 +156,34 @@ func TestTargets(t *testing.T) {
 	}
 }
 
-func TestDevURLs(t *testing.T) {
-	for _, tt := range []struct {
-		port, app, swagger string
-	}{
-		{"", "http://localhost:8080", "http://localhost:8080/swagger"},
-		{"4567", "http://localhost:4567", "http://localhost:4567/swagger"},
-	} {
-		app, swagger := devURLs(tt.port)
-		if app != tt.app || swagger != tt.swagger {
-			t.Fatalf("devURLs(%q) = %q, %q", tt.port, app, swagger)
-		}
+func TestDevPrintsStartupOnce(t *testing.T) {
+	source, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(t.TempDir())
+	var out bytes.Buffer
+	if err := Run(context.Background(), []string{"new", "--framework", source, "startup-api"}, &out, &out); err != nil {
+		t.Fatal(err, &out)
+	}
+	t.Chdir("startup-api")
+	// A short-lived app exercises the real go run output without leaving a server running.
+	main := `package main
+import "github.com/spidermeaow/graft-framework"
+func main() { graft.PrintStartup("4567") }
+`
+	if err := os.WriteFile("cmd/api/main.go", []byte(main), 0600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	if err := Run(ctx, []string{"dev"}, &out, &out); err != nil {
+		t.Fatal(err, &out)
+	}
+	want := "Starting server\n  App:     http://localhost:4567\n  Swagger: http://localhost:4567/swagger\nPress Ctrl+C to stop.\n"
+	if out.String() != want {
+		t.Fatalf("startup output = %q, want %q", out.String(), want)
 	}
 }
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.1
+
+- Fixed duplicate startup banners in `graft dev`; the application now reports
+  its App and Swagger URLs once, using its configured port.
+
 ## v0.1.0
 
 - Standard Go-module projects from both Windows installers and Go-installed CLI.

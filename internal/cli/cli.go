@@ -124,11 +124,6 @@ func goCommand(ctx context.Context, command string, args []string, out, errOut i
 		env = replaceEnv(env, "CGO_ENABLED", "0")
 	}
 	if command == "dev" {
-		appURL, swaggerURL := devURLs(os.Getenv("APP_PORT"))
-		fmt.Fprintln(out, "Starting development server")
-		fmt.Fprintln(out, "  App:    ", appURL)
-		fmt.Fprintln(out, "  Swagger:", swaggerURL)
-		fmt.Fprintln(out, "Press Ctrl+C to stop.")
 		return runGo(ctx, env, out, errOut, "run", *pkg)
 	}
 	if output == "" {
@@ -169,14 +164,6 @@ func copyBuildCompanions(output string) error {
 		}
 	}
 	return nil
-}
-
-func devURLs(port string) (app, swagger string) {
-	if port == "" {
-		port = "8080"
-	}
-	app = "http://localhost:" + port
-	return app, app + "/swagger"
 }
 
 func ensureEmbeddedWorkspace() error {
