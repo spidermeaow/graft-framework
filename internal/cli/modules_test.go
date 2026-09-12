@@ -73,6 +73,9 @@ func moduleProxy(t *testing.T) {
 	t.Setenv("GOPROXY", server.URL)
 	t.Setenv("GOSUMDB", "off")
 	t.Setenv("GOMODCACHE", t.TempDir())
+	// Go normally makes downloaded module directories read-only; allow the
+	// test-owned temporary cache to be removed by testing.T on Unix as well.
+	t.Setenv("GOFLAGS", "-modcacherw")
 	t.Setenv("GOWORK", "off")
 }
 
