@@ -1,0 +1,16 @@
+# {{.Name}}
+
+Run `graft dev`, then open http://localhost:8080 and http://localhost:8080/swagger.
+Use `graft build` for a local binary or `graft publish --target linux-x64` to deploy.
+
+Configuration uses environment variables directly. `.env.example` is a reference;
+Graft does not load it automatically. Set `APP_PORT` and, for migrations,
+`DATABASE_URL` in your shell or service configuration.
+
+Create SQL with `graft make:migration create_machines_table`, edit the Up/Down
+sections, then run `graft migrate`. Inspect `graft migrate:status`; undo the most
+recent batch with `graft migrate:rollback`, or individual migrations with `--step N`.
+Applied migrations must not be edited or removed.
+
+Development-generated projects may have a local `replace` in go.mod. Before
+sharing, replace it with your published Graft module/version and run `go mod tidy`.

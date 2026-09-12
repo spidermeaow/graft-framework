@@ -1,0 +1,24 @@
+package main
+
+import (
+	"log"
+	"os"
+
+	"github.com/spidermeaow/graft-framework"
+)
+
+func main() {
+	app := graft.New()
+	app.Use(graft.RequestID(), graft.Logger(), graft.Recovery())
+	app.GET("/{$}", func(c *graft.Context) error {
+		return c.JSON(200, map[string]string{"message": "Hello Graft"})
+	}, graft.Summary("Welcome"), graft.Tag("Application"))
+	app.Docs("{{.Name}}", "0.1.0")
+	port := os.Getenv("APP_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	if err := app.Run(":" + port); err != nil {
+		log.Fatal(err)
+	}
+}
