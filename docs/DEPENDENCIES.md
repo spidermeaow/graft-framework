@@ -29,3 +29,16 @@ the archive integrity, preserve LICENSE, NOTICE and bundle license notices, then
 run the documentation endpoint tests and inspect the UI.
 
 Upstream references: https://github.com/lib/pq and https://github.com/swagger-api/swagger-ui.
+
+## Automated checks
+
+`go run ./internal/cmd/check-swagger` verifies the vendored file SHA-256 hashes
+against internal/swaggerui/manifest.json and queries OSV for both swagger-ui-dist
+and swagger-ui at the pinned version. Network or advisory-query failures fail the
+gate. It does not prove that every bundled transitive JavaScript dependency is
+free from unpublished/unmapped issues; review upstream release/security notes.
+Refresh the manifest only after verifying the official archive integrity.
+
+CI and release run govulncheck v1.8.0; scheduled checks cover Linux, Windows and
+macOS. Actions are pinned by SHA and maintained with Dependabot. No JavaScript
+package installation is needed to build or run Graft.

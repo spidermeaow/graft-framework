@@ -406,3 +406,21 @@ CI runs these tests against a PostgreSQL service. Without the variable they skip
 See [ADRs](docs/adr), [dependency rationale and upstream licenses](docs/DEPENDENCIES.md),
 and [contributing conventions](CONTRIBUTING.md). The core HTTP package has no
 external Go dependencies. The CLI/example use one PostgreSQL driver.
+
+## Production controls (v0.2 prerelease)
+
+Graft includes opt-in `ConcurrencyLimit`, `BodyLimit`, `RequestDeadline`, a
+process-local `RateLimit`, bounded `Metrics`, `Health` and configurable server
+shutdown through `RunWithConfig`/`ServeWithConfig`. `DocsWithMiddleware` protects
+the spec and all Swagger assets. Existing method signatures remain available.
+
+New v0.2 applications bind to loopback and enable docs only in dev unless configured
+otherwise. Explicit v0.1.x scaffolds preserve their legacy behavior. Updating a
+module does not rewrite existing application code.
+
+Start with the [production and migration guide](docs/PRODUCTION.md), then run the
+[repeatable load harness](internal/cmd/loadtest/main.go) against a staging workload.
+[Machines API](examples/production-api/README.md) demonstrates read/write service
+authorization, DB deadlines/pool limits, health, private metrics and pagination.
+The project does not claim a production capacity until the target workload has
+passed its own load, soak and recovery criteria.

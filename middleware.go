@@ -65,7 +65,7 @@ func Recovery() Middleware {
 					if value == http.ErrAbortHandler {
 						panic(value)
 					}
-					slog.ErrorContext(r.Context(), "request panic", "panic", fmt.Sprint(value), "stack", string(debug.Stack()))
+					slog.ErrorContext(r.Context(), "request panic", "panic_type", fmt.Sprintf("%T", value), "request_id", w.Header().Get("X-Request-ID"), "stack", string(debug.Stack()))
 					if committed(w) {
 						panic(http.ErrAbortHandler)
 					}

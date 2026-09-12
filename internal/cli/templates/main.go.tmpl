@@ -1,9 +1,8 @@
-package main
+{{if .Modern}}package main
 
 import (
-	"os"
-
-	"github.com/spidermeaow/graft-framework"
+ "time"
+ "github.com/spidermeaow/graft-framework"
 )
 
 func main() {
@@ -17,15 +16,32 @@ func run() error {
 		return err
 	}
 	app := graft.New()
+	cfg, err := graft.ConfigFromEnv()
+	if err != nil { return err }
 	app.Use(graft.RequestID(), graft.Logger(), graft.Recovery())
+	app.Use(graft.ConcurrencyLimit(cfg.MaxConcurrent), graft.BodyLimit(cfg.MaxBodyBytes), graft.RequestDeadline(cfg.RequestTimeout))
 	app.GET("/{$}", func(c *graft.Context) error {
 		return c.JSON(200, map[string]string{"message": "Hello Graft"})
 	}, graft.Summary("Welcome"), graft.Tag("Application"))
-	app.Docs("{{.Name}}", "0.1.0")
-	port := os.Getenv("APP_PORT")
-	if port == "" {
-		port = "8080"
-	}
-	graft.PrintStartup(port)
-	return app.Run(":" + port)
+	if cfg.Docs { app.Docs("{{.Name}}", "0.1.0") }
+	graft.PrintStartupAddress(cfg.Address(), cfg.Docs)
+	return app.RunWithConfig(cfg.Address(), graft.ServerConfig{WriteTimeout: cfg.RequestTimeout + 5*time.Second})
 }
+{{else}}package main
+
+import (
+ "os"
+ "github.com/spidermeaow/graft-framework"
+)
+func main() { if err := run(); err != nil { graft.Fatal(err) } }
+func run() error {
+ if err := graft.LoadEnv(); err != nil { return err }
+ app := graft.New()
+ app.Use(graft.RequestID(), graft.Logger(), graft.Recovery())
+ app.GET("/{$}", func(c *graft.Context) error { return c.JSON(200, map[string]string{"message":"Hello Graft"}) }, graft.Summary("Welcome"), graft.Tag("Application"))
+ app.Docs("{{.Name}}", "0.1.0")
+ port := os.Getenv("APP_PORT"); if port == "" { port = "8080" }
+ graft.PrintStartup(port)
+ return app.Run(":" + port)
+}
+{{end}}

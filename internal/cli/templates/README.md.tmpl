@@ -22,3 +22,16 @@ work normally. `graft dev`, `graft build` and `graft publish` remain convenient
 shortcuts. Use `--framework <path>` only to develop against a local checkout.
 Commit both `go.mod` and `go.sum`. When upgrading the CLI, the app keeps its pinned
 framework version until you explicitly upgrade its dependency.
+
+## Runtime configuration (v0.2+ framework)
+
+New applications default to APP_HOST=127.0.0.1. Set APP_HOST=0.0.0.0 explicitly for
+container ingress or run `graft dev --host 0.0.0.0` for network-accessible development.
+Swagger is enabled under `graft dev`; compiled apps default to docs off. APP_DOCS
+explicitly overrides this. The legacy v0.1.x scaffold retains its older behavior.
+
+APP_MAX_CONCURRENT (64), APP_MAX_BODY_BYTES (1048576), and APP_REQUEST_TIMEOUT (10s)
+configure bounded work. These are starter values, not capacity guarantees. Pass
+request contexts to downstream calls; a cooperative deadline cannot stop code
+that ignores cancellation. Authentication/authorization must be added by the app.
+See the framework's docs/PRODUCTION.md and Machines example before deploying.

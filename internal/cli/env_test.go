@@ -25,3 +25,19 @@ func TestMigrationLoadsDotEnv(t *testing.T) {
 		t.Fatal("dotenv not consumed:", err)
 	}
 }
+
+func TestDevelopmentEnvironment(t *testing.T) {
+	for _, tt := range []struct {
+		env        []string
+		host, want string
+	}{
+		{nil, "", "APP_HOST=127.0.0.1"},
+		{[]string{"APP_HOST=0.0.0.0"}, "", "APP_HOST=0.0.0.0"},
+		{[]string{"APP_HOST=0.0.0.0"}, "::1", "APP_HOST=::1"},
+	} {
+		got := strings.Join(developmentEnv(tt.env, tt.host), ";")
+		if !strings.Contains(got, tt.want) || !strings.Contains(got, "GRAFT_DEV=1") {
+			t.Fatal(got)
+		}
+	}
+}

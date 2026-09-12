@@ -1,0 +1,69 @@
+{
+  "arch": "amd64",
+  "body_bytes": 1024,
+  "cpus": 8,
+  "go": "go1.26.6",
+  "handler_deadline": "1s",
+  "handler_delay": "5ms",
+  "limit": 8,
+  "memory_scope": "client and server in one process; heap is not RSS",
+  "metrics": {
+    "requests": 1460164,
+    "in_flight": 0,
+    "rejected": 1292842,
+    "duration_seconds": 971.1469256
+  },
+  "os": "windows",
+  "response_items": 1,
+  "results": [
+    {
+      "phase": "steady",
+      "workers": 4,
+      "seconds": 60.00415,
+      "requests": 42686,
+      "requests_per_second": 711.3841292643925,
+      "statuses": {
+        "200": 42686
+      },
+      "transport_errors": 0,
+      "p95_upper_bound_ms": 7,
+      "p99_upper_bound_ms": 7,
+      "peak_heap_bytes": 3339416,
+      "after_gc_heap_bytes": 1271264,
+      "goroutines_after": 3
+    },
+    {
+      "phase": "overload",
+      "workers": 32,
+      "seconds": 60.0060717,
+      "requests": 1374223,
+      "requests_per_second": 22901.399159578712,
+      "statuses": {
+        "200": 81381,
+        "503": 1292842
+      },
+      "transport_errors": 0,
+      "p95_upper_bound_ms": 7,
+      "p99_upper_bound_ms": 9,
+      "peak_heap_bytes": 5181280,
+      "after_gc_heap_bytes": 1803784,
+      "goroutines_after": 3
+    },
+    {
+      "phase": "recovery",
+      "workers": 4,
+      "seconds": 60.0024084,
+      "requests": 43255,
+      "requests_per_second": 720.8877302331751,
+      "statuses": {
+        "200": 43255
+      },
+      "transport_errors": 0,
+      "p95_upper_bound_ms": 7,
+      "p99_upper_bound_ms": 7,
+      "peak_heap_bytes": 3295576,
+      "after_gc_heap_bytes": 1527208,
+      "goroutines_after": 3
+    }
+  ]
+}

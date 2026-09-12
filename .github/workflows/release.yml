@@ -23,8 +23,8 @@ jobs:
     env:
       GRAFT_TEST_DATABASE_URL: postgres://graft:graft_test@localhost:5432/postgres?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Validate release source
@@ -40,6 +40,8 @@ jobs:
           go mod verify
           go test -race ./...
           go vet ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+          go run ./internal/cmd/check-swagger
   windows:
     needs: verify
     runs-on: windows-latest
@@ -47,8 +49,8 @@ jobs:
       matrix:
         arch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Package
@@ -69,7 +71,7 @@ jobs:
           Copy-Item internal/swaggerui/assets/swagger-ui-bundle.js.LICENSE.txt "$packageDir/licenses/swagger-ui-bundle-LICENSE.txt"
           Copy-Item "$packageDir/Setup.exe" "release-assets/Graft-Setup-$env:RELEASE_TAG-windows-$env:RELEASE_ARCH.exe"
           Compress-Archive -Path "$packageDir/graft.exe", "$packageDir/LICENSE", "$packageDir/README.md", "$packageDir/licenses" -DestinationPath "release-assets/graft-$env:RELEASE_TAG-windows-$env:RELEASE_ARCH.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-${{ matrix.arch }}
           path: release-assets/*
@@ -82,8 +84,8 @@ jobs:
         os: [linux, darwin]
         arch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Package
@@ -101,7 +103,7 @@ jobs:
           cp internal/swaggerui/assets/NOTICE package/licenses/swagger-ui-NOTICE
           cp internal/swaggerui/assets/swagger-ui-bundle.js.LICENSE.txt package/licenses/swagger-ui-bundle-LICENSE.txt
           tar -czf "release-assets/graft-$RELEASE_TAG-$GOOS-$GOARCH.tar.gz" -C package graft LICENSE README.md licenses
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}
           path: release-assets/*
@@ -110,8 +112,8 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Install tagged CLI and test generated application
@@ -133,7 +135,7 @@ jobs:
           test ! -e .graft
           go test ./...
           "$GOBIN/graft" build
-          APP_PORT=18987 ./bin/release-check > server.log 2>&1 &
+          APP_DOCS=true APP_PORT=18987 ./bin/release-check > server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://localhost:18987/swagger
@@ -143,7 +145,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: release-assets
           merge-multiple: true
@@ -155,4 +157,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           sha256sum *.zip *.tar.gz *.exe > SHA256SUMS.txt
-          gh release create "$RELEASE_TAG" --verify-tag --title "Graft $RELEASE_TAG" --generate-notes ./*
+          sha256sum -c SHA256SUMS.txt
+          args=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then args+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" --verify-tag --title "Graft $RELEASE_TAG" --generate-notes "${args[@]}" ./*

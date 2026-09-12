@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +26,7 @@ Usage:
   graft install [--dir path] [--no-path]
   graft new [--module name] [--framework local-path] [--version v0.1.0] project-name
   graft upgrade-project --version v0.1.0 [--apply]
-  graft dev [--package ./cmd/api]
+  graft dev [--package ./cmd/api] [--host 127.0.0.1]
   graft build [--package ./cmd/api] [--output path]
   graft publish --target linux-x64 [--package ./cmd/api] [--output path]
   graft make:migration [--dir migrations] migration_name
@@ -82,6 +83,10 @@ func goCommand(ctx context.Context, command string, args []string, out, errOut i
 	f := flags(command, errOut)
 	pkg := f.String("package", "", "main package (defaults to ./cmd/api if present, otherwise .)")
 	var output, target string
+	var host string
+	if command == "dev" {
+		f.StringVar(&host, "host", "", "bind IP or localhost (default APP_HOST or 127.0.0.1; requires current app template)")
+	}
 	if command != "dev" {
 		f.StringVar(&output, "output", "", "binary output path")
 	}
@@ -124,6 +129,10 @@ func goCommand(ctx context.Context, command string, args []string, out, errOut i
 		env = replaceEnv(env, "CGO_ENABLED", "0")
 	}
 	if command == "dev" {
+		if host != "" && host != "localhost" && net.ParseIP(host) == nil {
+			return errors.New("host must be an IP address or localhost")
+		}
+		env = developmentEnv(env, host)
 		return runGo(ctx, env, out, errOut, "run", *pkg)
 	}
 	if output == "" {
@@ -148,6 +157,22 @@ func goCommand(ctx context.Context, command string, args []string, out, errOut i
 	}
 	fmt.Fprintln(out, "Built", output)
 	return nil
+}
+
+func developmentEnv(env []string, host string) []string {
+	if host == "" {
+		for _, entry := range env {
+			key, value, _ := strings.Cut(entry, "=")
+			if strings.EqualFold(key, "APP_HOST") {
+				host = value
+			}
+		}
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	env = replaceEnv(env, "APP_HOST", host)
+	return replaceEnv(env, "GRAFT_DEV", "1")
 }
 
 func copyBuildCompanions(output string) error {

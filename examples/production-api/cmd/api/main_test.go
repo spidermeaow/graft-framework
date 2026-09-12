@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spidermeaow/graft-framework"
 	"github.com/spidermeaow/graft-framework/migration"
 	"github.com/spidermeaow/graft-framework/migration/postgres"
 )
@@ -60,7 +61,10 @@ func TestMachinesWorkflow(t *testing.T) {
 	if err := runner.Up(ctx, m); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(application(db))
+	health := &graft.Health{}
+	health.SetReady(true)
+	cfg := testConfig()
+	server := httptest.NewServer(application(db, cfg, health, &graft.Metrics{}))
 	defer server.Close()
 	client := server.Client()
 	client.Timeout = 3 * time.Second
@@ -70,6 +74,7 @@ func TestMachinesWorkflow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		r.Header.Set("Authorization", "Bearer "+cfg.writeToken)
 		if body != "" {
 			r.Header.Set("Content-Type", "application/json")
 		}
@@ -100,6 +105,10 @@ func TestMachinesWorkflow(t *testing.T) {
 	request("GET", "/api/machines/invalid", "", 400)
 	request("GET", "/api/machines?limit=0", "", 400)
 	request("GET", "/api/machines?limit=1", "", 200)
+	request("GET", "/api/machines?after_id=-1", "", 400)
+	if body := request("GET", "/api/machines?after_id=1", "", 200); strings.TrimSpace(string(body)) != "[]" {
+		t.Fatal(string(body))
+	}
 	request("POST", "/api/machines", `{"name":"press-01"}`, 409)
 	request("POST", "/api/machines", `{"name":" "}`, 400)
 	request("POST", "/api/machines", `{"name":"x","unexpected":true}`, 400)
@@ -108,10 +117,57 @@ func TestMachinesWorkflow(t *testing.T) {
 	if err := json.Unmarshal(request("GET", "/openapi.json", "", 200), &spec); err != nil {
 		t.Fatal(err)
 	}
-	if len(spec["paths"].(map[string]any)) != 4 {
+	if len(spec["paths"].(map[string]any)) != 6 {
 		t.Fatal(spec)
 	}
+
+	// A locked table must not hold the API connection indefinitely.
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, "LOCK TABLE machines IN ACCESS EXCLUSIVE MODE"); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	request("GET", "/api/machines", "", 504)
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	request("GET", "/api/machines", "", 200)
+	// The deadline also bounds waiting for a connection, not just executing SQL.
+	db.SetMaxOpenConns(1)
+	held, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request("GET", "/api/machines", "", 504)
+	held.Close()
+	request("GET", "/api/machines", "", 200)
+	if db.Stats().WaitCount == 0 {
+		t.Fatal("pool saturation was not exercised")
+	}
+	// Expand/contract compatibility: old queries and the new column coexist.
+	if _, err := db.ExecContext(ctx, "ALTER TABLE machines ADD COLUMN notes TEXT"); err != nil {
+		t.Fatal(err)
+	}
+	request("POST", "/api/machines", `{"name":"old-writer"}`, 201)
+	if _, err := db.ExecContext(ctx, "UPDATE machines SET notes=$1 WHERE name=$2", "new-writer", "old-writer"); err != nil {
+		t.Fatal(err)
+	}
+	request("GET", "/api/machines", "", 200)
+	if _, err := db.ExecContext(ctx, "ALTER TABLE machines DROP COLUMN notes"); err != nil {
+		t.Fatal(err)
+	}
+	request("GET", "/api/machines", "", 200)
 	if err := runner.Rollback(ctx, m, 0); err != nil {
 		t.Fatal(err)
 	}
+	db.Close()
+	request("GET", "/readyz", "", 503)
+	request("GET", "/livez", "", 200)
+}
+
+func testConfig() appConfig {
+	return appConfig{runtime: graft.RuntimeConfig{Docs: true, MaxConcurrent: 8, MaxBodyBytes: 1 << 20, RequestTimeout: 3 * time.Second}, queryTimeout: time.Second, rate: 10000, burst: 10000, readToken: strings.Repeat("r", 32), writeToken: strings.Repeat("w", 32)}
 }

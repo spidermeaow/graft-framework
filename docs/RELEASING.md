@@ -59,3 +59,20 @@ Keep English Quick Start, CHANGELOG and examples current. Record opt-in projects
 in BUILT_WITH_GRAFT.md, including a public link and permission to list them.
 GitHub Release asset download counts measure downloads, not unique users or
 active deployments. Never present stars or download counts as verified usage.
+
+## v0.2 release acceptance
+
+Run the production tests with an isolated PostgreSQL URL, race detection, the
+load/soak harness and both security scanners. Regenerate the embedded bundle.
+Release candidates use a fresh `v0.2.0-rc.N` tag; the workflow marks hyphenated tags
+as prereleases so they do not replace the latest stable release. The tagged-module
+smoke test explicitly enables docs on its generated app.
+
+The security workflow checks Go dependencies on Linux/Windows/macOS weekly, plus
+pinned Swagger assets/advisories. Dependency automation covers Go and Actions;
+review Swagger's manifest and upstream bundle notices during JS upgrades.
+
+Do not promote stable until the deployment workload meets the acceptance criteria
+in PRODUCTION.md. Archive the load output, hardware/configuration, failure tests,
+restore drill and canary observations. Compare downloaded assets with SHA256SUMS;
+checksums detect corruption but are not independent publisher signatures.

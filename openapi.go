@@ -77,8 +77,14 @@ func (a *App) OpenAPI(title, version string) ([]byte, error) {
 // Docs enables /openapi.json and an embedded, offline-capable Swagger UI at /swagger.
 // It must be called before serving. Documentation routes are not included in the spec.
 func (a *App) Docs(title, version string) {
+	a.DocsWithMiddleware(title, version)
+}
+
+// DocsWithMiddleware protects the spec, UI and every asset with the same middleware.
+// Omit the call entirely to disable documentation. App middleware still applies.
+func (a *App) DocsWithMiddleware(title, version string, middleware ...Middleware) {
 	a.configure(func() {
-		a.mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		a.mux.Handle("GET /openapi.json", chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			b, err := a.OpenAPI(title, version)
 			if err != nil {
 				handleError(w, r, err)
@@ -86,7 +92,7 @@ func (a *App) Docs(title, version string) {
 			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			_, _ = w.Write(b)
-		})
+		}), middleware))
 		assets := http.StripPrefix("/swagger/", swaggerui.Handler())
 		serve := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -101,7 +107,7 @@ func (a *App) Docs(title, version string) {
 			}
 			assets.ServeHTTP(w, r)
 		})
-		a.mux.Handle("GET /swagger", serve)
-		a.mux.Handle("GET /swagger/", serve)
+		a.mux.Handle("GET /swagger", chain(serve, middleware))
+		a.mux.Handle("GET /swagger/", chain(serve, middleware))
 	})
 }

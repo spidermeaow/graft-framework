@@ -35,7 +35,12 @@ type ErrorHandler func(*Context, error)
 func DefaultErrorHandler(c *Context, err error) {
 	status, message := http.StatusInternalServerError, "internal server error"
 	var he *HTTPError
-	if errors.As(err, &he) && he.Code >= 400 && he.Code <= 599 {
+	var size *http.MaxBytesError
+	if errors.Is(err, context.DeadlineExceeded) || c.Context().Err() == context.DeadlineExceeded {
+		status, message = 504, "request deadline exceeded"
+	} else if errors.As(err, &size) {
+		status, message = 413, "request body too large"
+	} else if errors.As(err, &he) && he.Code >= 400 && he.Code <= 599 {
 		status, message = he.Code, he.Message
 	} else {
 		slog.ErrorContext(c.Context(), "request error", "error", err, "request_id", c.Response().Header().Get("X-Request-ID"))

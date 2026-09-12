@@ -95,7 +95,7 @@ func TestProjectGenerationAndBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	process := exec.CommandContext(ctx, binary)
-	if err := os.WriteFile(".env", []byte(fmt.Sprintf("APP_PORT=%d\n", port)), 0600); err != nil {
+	if err := os.WriteFile(".env", []byte(fmt.Sprintf("APP_PORT=%d\nAPP_DOCS=true\n", port)), 0600); err != nil {
 		t.Fatal(err)
 	}
 	process.Env = []string{}

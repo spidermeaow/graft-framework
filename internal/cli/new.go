@@ -58,7 +58,8 @@ func newProject(ctx context.Context, args []string, out, errOut io.Writer) error
 	}
 	data := struct {
 		Name, Module, Version, Replace string
-	}{name, *module, *version, replace}
+		Modern                         bool
+	}{name, *module, *version, replace, *framework != "" || modernFramework(*version)}
 	files := map[string]string{"main.go.tmpl": "cmd/api/main.go", "go.mod.tmpl": "go.mod", "README.md.tmpl": "README.md", "env.tmpl": ".env.example", "gitignore.tmpl": ".gitignore"}
 	// Render before making any filesystem changes; a pre-existing target is never overwritten.
 	rendered := map[string][]byte{}
@@ -113,4 +114,15 @@ func isFramework(path string) bool {
 	}
 	fields := strings.Fields(string(b))
 	return len(fields) >= 2 && fields[0] == "module" && fields[1] == "github.com/spidermeaow/graft-framework"
+}
+
+// Older explicitly selected framework releases must keep a compatible scaffold.
+func modernFramework(version string) bool {
+	parts := strings.Split(strings.TrimPrefix(version, "v"), ".")
+	if len(parts) < 2 {
+		return false
+	}
+	major, _ := strconv.Atoi(parts[0])
+	minor, _ := strconv.Atoi(parts[1])
+	return major > 0 || minor >= 2
 }

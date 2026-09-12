@@ -34,7 +34,7 @@ func moduleProxy(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		w, err := zw.Create("github.com/spidermeaow/graft-framework@v0.1.0/" + filepath.ToSlash(rel))
+		w, err := zw.Create("github.com/spidermeaow/graft-framework@v0.2.0-rc.1/" + filepath.ToSlash(rel))
 		if err != nil {
 			return err
 		}
@@ -57,14 +57,14 @@ func moduleProxy(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/github.com/spidermeaow/graft-framework/@v/v0.1.0.zip":
+		case "/github.com/spidermeaow/graft-framework/@v/v0.2.0-rc.1.zip":
 			w.Write(archive.Bytes())
-		case "/github.com/spidermeaow/graft-framework/@v/v0.1.0.mod":
+		case "/github.com/spidermeaow/graft-framework/@v/v0.2.0-rc.1.mod":
 			w.Write(mod)
-		case "/github.com/spidermeaow/graft-framework/@v/v0.1.0.info":
-			w.Write([]byte(`{"Version":"v0.1.0","Time":"2026-01-01T00:00:00Z"}`))
+		case "/github.com/spidermeaow/graft-framework/@v/v0.2.0-rc.1.info":
+			w.Write([]byte(`{"Version":"v0.2.0-rc.1","Time":"2026-01-01T00:00:00Z"}`))
 		case "/github.com/spidermeaow/graft-framework/@v/list":
-			w.Write([]byte("v0.1.0\n"))
+			w.Write([]byte("v0.2.0-rc.1\n"))
 		default:
 			http.NotFound(w, r)
 		}
@@ -80,6 +80,9 @@ func moduleProxy(t *testing.T) {
 }
 
 func TestStandardProjectAndLegacyUpgrade(t *testing.T) {
+	original := Version
+	Version = "v0.2.0-rc.1"
+	t.Cleanup(func() { Version = original })
 	moduleProxy(t)
 	t.Chdir(t.TempDir())
 	var out bytes.Buffer
@@ -111,7 +114,7 @@ func TestStandardProjectAndLegacyUpgrade(t *testing.T) {
 	if err := os.WriteFile("go.work", []byte("go 1.26.6\n// graft: embedded-framework\nuse .\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"upgrade-project", "--version", "v0.1.0"}
+	args := []string{"upgrade-project", "--version", "v0.2.0-rc.1"}
 	if err := Run(context.Background(), args, &out, &out); err != nil {
 		t.Fatal(err, &out)
 	}
@@ -177,7 +180,7 @@ func TestLegacyWorkspaceAndVersionSelection(t *testing.T) {
 	if err := ensureEmbeddedWorkspace(); err != nil {
 		t.Fatal(err)
 	}
-	if err := Run(context.Background(), []string{"upgrade-project", "--version", "v0.1.0", "--apply"}, &out, &out); err == nil {
+	if err := Run(context.Background(), []string{"upgrade-project", "--version", "v0.2.0-rc.1", "--apply"}, &out, &out); err == nil {
 		t.Fatal("overwrote user-managed workspace")
 	}
 	work, _ = os.ReadFile("go.work")
