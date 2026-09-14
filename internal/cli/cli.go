@@ -26,8 +26,8 @@ Usage:
   graft version
   graft licenses
   graft install [--dir path] [--no-path]
-  graft new [--database postgres|mysql] [--module name] [--framework local-path] [--version v0.2.0] project-name
-  graft upgrade-project --version v0.2.0 [--apply]
+  graft new [--database postgres|mysql] [--module name] [--framework local-path] [--version v0.2.3] project-name
+  graft upgrade-project --version v0.2.3 [--apply]
   graft dev [--package ./cmd/api] [--host 127.0.0.1]
   graft build [--package ./cmd/api] [--output path]
   graft publish --target linux-x64 [--package ./cmd/api] [--output path]

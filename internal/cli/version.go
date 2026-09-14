@@ -10,18 +10,18 @@ import (
 )
 
 // Version can be set at build time with -ldflags -X. Development builds use
-// 0.2.0-dev; go install at a published version uses the module's build metadata.
-var Version = "0.2.0-dev"
+// 0.2.3-dev; go install at a published version uses the module's build metadata.
+var Version = "0.2.3-dev"
 
 // frameworkVersion ties generated applications to the installed CLI release.
 func frameworkVersion() string {
-	if Version != "0.2.0-dev" {
+	if Version != "0.2.3-dev" {
 		return "v" + strings.TrimPrefix(Version, "v")
 	}
 	if info, ok := debug.ReadBuildInfo(); ok && publishedVersion(info.Main.Version) {
 		return info.Main.Version
 	}
-	return "v0.2.0"
+	return "v0.2.3"
 }
 
 var pseudoVersion = regexp.MustCompile(`-[0-9]{14}-[a-f0-9]+(?:\+incompatible)?$`)
@@ -39,7 +39,7 @@ func versionCommand(args []string, out, errOut io.Writer) error {
 		return fmt.Errorf("version takes no positional arguments")
 	}
 	version := Version
-	if version == "0.2.0-dev" {
+	if version == "0.2.3-dev" {
 		if info, ok := debug.ReadBuildInfo(); ok && publishedVersion(info.Main.Version) {
 			version = info.Main.Version
 		}

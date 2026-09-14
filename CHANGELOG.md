@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.2.3
+
+- Added a Windows application manifest to Setup so Program Compatibility Assistant
+  recognizes it as a current per-user installer instead of applying its legacy
+  compatibility heuristic.
+
+## v0.2.2
+
+- `graft new` now asks users to select PostgreSQL or MySQL and creates a matching
+  `.env.example`; scripts can choose with `--database postgres|mysql`.
+- Generated Swagger metadata now uses the selected Graft framework version.
+
+## v0.2.0
+
+- Added MySQL 8.0+ migration support to migrate, status and rollback commands,
+  including a MySQL driver selector in `.env`.
+- Added session-scoped locking and dirty-state protection for MySQL's
+  nontransactional DDL, with recovery documentation and integration checks.
+
 ## v0.2.0-rc.1
 
 - Added bounded concurrency and request body middleware, cooperative request
