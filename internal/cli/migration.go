@@ -44,8 +44,18 @@ func migrationCommand(ctx context.Context, command string, args []string, out, e
 	}
 	timeout := f.Duration("timeout", 2*time.Minute, "database operation timeout")
 	steps := 0
+	var pending, applied int64
+	var plan, confirm bool
+	var note string
 	if command == "migrate:rollback" {
 		f.IntVar(&steps, "step", 0, "number of individual migrations; omitted rolls back last batch")
+	}
+	if command == "migrate:repair" {
+		f.Int64Var(&pending, "mark-pending", 0, "dirty version verified to be fully pending")
+		f.Int64Var(&applied, "mark-applied", 0, "dirty version verified to be fully applied")
+		f.BoolVar(&plan, "plan", false, "print a read-only repair plan")
+		f.BoolVar(&confirm, "confirm", false, "apply a reviewed repair plan")
+		f.StringVar(&note, "note", "", "operator reason recorded in audit history")
 	}
 	if err := f.Parse(args); err != nil {
 		return err
@@ -56,6 +66,12 @@ func migrationCommand(ctx context.Context, command string, args []string, out, e
 	if *timeout <= 0 || steps < 0 {
 		return errors.New("timeout must be positive and step nonnegative")
 	}
+	if command == "migrate:repair" && ((pending <= 0 && applied <= 0) || (pending > 0 && applied > 0) || (pending < 0 || applied < 0) || plan == confirm) {
+		return errors.New("usage: graft migrate:repair (--mark-pending VERSION | --mark-applied VERSION) (--plan | --confirm --note REASON)")
+	}
+	if command == "migrate:repair" && confirm && strings.TrimSpace(note) == "" {
+		return errors.New("repair requires --note REASON with --confirm")
+	}
 	if err := graft.LoadEnv(); err != nil {
 		return err
 	}
@@ -63,9 +79,12 @@ func migrationCommand(ctx context.Context, command string, args []string, out, e
 	if err != nil {
 		return err
 	}
-	migrations, err := migration.LoadDialect(os.DirFS(*dir), ".", dialect)
-	if err != nil {
-		return err
+	if command == "migrate:repair" && dialect != "mysql" {
+		return errors.New("migrate:repair is for MySQL dirty migrations; PostgreSQL rolls back failed migrations transactionally")
+	}
+	migrations, loadErr := migration.LoadDialect(os.DirFS(*dir), ".", dialect)
+	if loadErr != nil && command != "migrate:doctor" {
+		return loadErr
 	}
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
@@ -100,11 +119,84 @@ func migrationCommand(ctx context.Context, command string, args []string, out, e
 			fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%s\n", status.Migration.Version, status.Migration.Name, state, batch, duration)
 		}
 		err = w.Flush()
+	case "migrate:doctor":
+		if loadErr != nil {
+			fmt.Fprintf(out, "Local migration files could not be read: %v\n", loadErr)
+		}
+		if dialect == "mysql" {
+			err = mysqlDoctor(ctx, store.(*mysqlstore.Store), migrations, out)
+			if err == nil && loadErr != nil {
+				err = loadErr
+			}
+		} else {
+			if loadErr != nil {
+				err = loadErr
+			} else {
+				_, err = runner.Status(ctx, migrations)
+			}
+			if err == nil {
+				fmt.Fprintln(out, "PostgreSQL migration history is healthy; failed SQL rolls back transactionally.")
+			}
+		}
+	case "migrate:repair":
+		target, version := "pending", pending
+		if applied > 0 {
+			target, version = "applied", applied
+		}
+		var local *migration.Migration
+		for i := range migrations {
+			if migrations[i].Version == version {
+				local = &migrations[i]
+				break
+			}
+		}
+		if local == nil {
+			return fmt.Errorf("local migration %d is missing; repair refused", version)
+		}
+		mysqlStore := store.(*mysqlstore.Store)
+		var dirty mysqlstore.DirtyMigration
+		dirty, err = mysqlStore.RepairPlan(ctx, *local, target)
+		if err != nil {
+			break
+		}
+		fmt.Fprintf(out, "Dirty migration: %d_%s (%s)\n", dirty.Version, dirty.Name, dirty.Direction)
+		fmt.Fprintf(out, "Plan: mark %s after verifying the database fully matches that state.\n", target)
+		if plan {
+			break
+		}
+		err = mysqlStore.Repair(ctx, *local, target, note)
+		if err == nil {
+			fmt.Fprintf(out, "Repaired migration %d as %s. Audit note recorded.\n", version, target)
+		}
 	}
-	if err == nil && command != "migrate:status" {
+	if err == nil && (command == "migrate" || command == "migrate:rollback") {
 		fmt.Fprintln(out, "Migrations complete")
 	}
 	return err
+}
+
+func mysqlDoctor(ctx context.Context, store *mysqlstore.Store, migrations []migration.Migration, out io.Writer) error {
+	dirty, err := store.Inspect(ctx)
+	if err != nil {
+		return err
+	}
+	if len(dirty) == 0 {
+		fmt.Fprintln(out, "No dirty MySQL migrations. Run graft migrate:status for full history.")
+		return nil
+	}
+	local := make(map[int64]migration.Migration, len(migrations))
+	for _, m := range migrations {
+		local[m.Version] = m
+	}
+	for _, d := range dirty {
+		fmt.Fprintf(out, "DIRTY %d_%s (%s), last event: %s\n", d.Version, d.Name, d.Direction, d.LastEvent)
+		if m, ok := local[d.Version]; !ok || m.Name != d.Name || m.Checksum != d.Checksum {
+			fmt.Fprintln(out, "  Local SQL is missing or differs from recorded name/checksum; restore the exact file before repair.")
+		}
+		fmt.Fprintln(out, "  Back up and inspect actual schema/data. Restore fully to pending or applied state before changing history.")
+		fmt.Fprintf(out, "  Preview: graft migrate:repair --mark-pending %d --plan (or --mark-applied %d --plan)\n", d.Version, d.Version)
+	}
+	return &mysqlstore.DirtyError{Version: dirty[0].Version, Direction: dirty[0].Direction}
 }
 
 func migrationDriver(value string) (string, error) {

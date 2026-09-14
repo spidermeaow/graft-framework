@@ -79,6 +79,51 @@ func TestMySQLCommandsFromDotEnv(t *testing.T) {
 	if !strings.Contains(out.String(), "pending") {
 		t.Fatal(out.String())
 	}
+	if err := Run(ctx, []string{"make:migration", "create_partial"}, &out, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	entries, err = os.ReadDir("migrations")
+	if err != nil || len(entries) != 2 {
+		t.Fatal(entries, err)
+	}
+	badFile := entries[1].Name()
+	version, _, _ := strings.Cut(badFile, "_")
+	if err := os.WriteFile("migrations/"+badFile, []byte("-- +graft Up\nCREATE TABLE partial (id INT); INSERT INTO nonexistent_table VALUES (1);\n-- +graft Down\nDROP TABLE partial;"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(ctx, []string{"migrate"}, io.Discard, io.Discard); err == nil {
+		t.Fatal("partial SQL failure accepted")
+	}
+	out.Reset()
+	if err := Run(ctx, []string{"migrate:doctor"}, &out, io.Discard); err == nil || !strings.Contains(out.String(), "DIRTY") {
+		t.Fatal(out.String(), err)
+	}
+	out.Reset()
+	if err := Run(ctx, []string{"migrate:repair", "--mark-pending", version, "--plan"}, &out, io.Discard); err != nil || !strings.Contains(out.String(), "Plan:") {
+		t.Fatal(out.String(), err)
+	}
+	if err := Run(ctx, []string{"migrate:status"}, io.Discard, io.Discard); err == nil {
+		t.Fatal("read-only plan cleared dirty state")
+	}
+	appDB, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer appDB.Close()
+	if _, err := appDB.Exec("DROP TABLE partial"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := Run(ctx, []string{"migrate:repair", "--mark-pending", version, "--note", "restored partial table", "--confirm"}, &out, io.Discard); err != nil {
+		t.Fatal(err, out.String())
+	}
+	if err := Run(ctx, []string{"migrate:status"}, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	var event, note string
+	if err := appDB.QueryRow("SELECT event,note FROM graft_migration_events ORDER BY id DESC LIMIT 1").Scan(&event, &note); err != nil || event != "repaired" || !strings.Contains(note, "restored partial table") {
+		t.Fatal(event, note, err)
+	}
 }
 
 func TestMigrationDriver(t *testing.T) {
@@ -114,6 +159,19 @@ func TestOpenMigrationStore(t *testing.T) {
 		_, _, err := openMigrationStore("mysql", dsn)
 		if err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatalf("invalid/sensitive diagnostic: %v", err)
+		}
+	}
+}
+
+func TestRepairArgumentValidation(t *testing.T) {
+	for _, args := range [][]string{
+		{"migrate:repair"},
+		{"migrate:repair", "--mark-pending", "1", "--plan", "--confirm"},
+		{"migrate:repair", "--mark-pending", "1", "--mark-applied", "1", "--plan"},
+		{"migrate:repair", "--mark-pending", "1", "--confirm"},
+	} {
+		if err := Run(context.Background(), args, io.Discard, io.Discard); err == nil {
+			t.Fatalf("accepted %v", args)
 		}
 	}
 }

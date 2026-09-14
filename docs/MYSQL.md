@@ -56,14 +56,52 @@ timeouts and crashes leave the marker. Status returns a nonzero exit code with
 the dirty version/direction; migrate and rollback also stop without executing SQL.
 This deliberately errs on the side of caution if the execution result is unknown.
 
+`graft migrate:doctor` displays the dirty version, direction and latest audit
+event. Graft records `started`, `sql_done`, `failed` and `repaired` events in
+`graft_migration_events`; it records only an error type, not SQL contents or
+credentials. An interrupted process can leave a `started` event with no `failed`
+event. `sql_done` means the SQL call returned successfully, but you must still
+verify the actual schema and data before changing history.
+Doctor exits nonzero while any dirty migration remains, so CI/deployment scripts
+can stop before running further migrations.
+These commands are available in the current source build; v0.2.3 users should
+follow the manual SQL recovery procedure below until a release includes them.
+
 Do not simply clear dirty and retry. Recovery must be performed by an operator:
 
 1. Stop other migration runners and application writes; back up schema and data.
 2. Inspect the failed SQL, actual schema/data and the history row. Restore the
    state **before the failed operation**, including any affected data. A failed
    Down must be restored to its fully applied state, not its pending state.
-3. Only after verifying that restoration, repair the single affected history row
-   using a SQL client on the same database. Hold Graft's lock throughout repair:
+3. Preview the history change. Choose `pending` only when schema and data fully
+   match the state before Up (or after Down); choose `applied` only when they fully
+   match the state after Up (or before Down). The plan checks the local file's name
+   and checksum against the dirty row:
+
+```sh
+graft migrate:doctor
+graft migrate:repair --mark-pending 202609140001 --plan
+# or: graft migrate:repair --mark-applied 202609140001 --plan
+```
+
+4. After verifying the database state, run exactly the reviewed target with an
+   operator note. `--confirm` is required; Graft takes the migration lock and
+   writes the history change and audit event in one transaction:
+
+```sh
+graft migrate:repair --mark-pending 202609140001 --note "restored pre-Up snapshot" --confirm
+graft migrate:doctor
+graft migrate:status
+```
+
+The second command is an example for a failed Up restored to pending. For a
+failed Down restored to its applied state, use `--mark-applied` instead. If SQL
+fully completed before the process stopped, verify every effect before choosing
+the corresponding final state. The CLI cannot prove that the schema/data matches
+your claim. Repair only changes the history row and records the operator note.
+
+For installations running an older Graft CLI, perform the equivalent repair using
+a SQL client on the same database. Hold Graft's lock throughout repair:
 
 ```sql
 SET @graft_lock = CONCAT('graft:', LEFT(SHA2(LOWER(DATABASE()), 256), 56));
@@ -82,7 +120,7 @@ SELECT RELEASE_LOCK(@graft_lock);
 Confirm exactly one row changed. Fix the underlying cause, run status, then retry.
 Never modify an applied migration's checksum to bypass validation. For an invalid
 Down in an applied file, restore and seek a reviewed forward-fix migration instead.
-There is intentionally no automatic force/repair command that could hide data loss.
+There is no automatic SQL rollback or unguarded force mode.
 
 ## Supported SQL and application code
 

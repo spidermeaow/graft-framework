@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2.4
+
+- Added `migrate:doctor` and guarded `migrate:repair --plan` / `--confirm` for
+  MySQL dirty migrations, with name/checksum checks and operator audit notes.
+- Recorded migration start, SQL completion and failure events; added a tested
+  recovery path for failed Up and Down operations.
+- Added `graft doctor` for read-only checks of Go, dotenv/runtime configuration,
+  local migrations, and an optional PostgreSQL/MySQL connection ping.
+
 ## v0.2.3
 
 - Added a Windows application manifest to Setup so Program Compatibility Assistant

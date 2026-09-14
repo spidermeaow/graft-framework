@@ -20,7 +20,9 @@ Applied migrations must not be edited or removed.
 Use `graft new --database postgres` or `graft new --database mysql` in scripts to
 skip the selector. SQL files are database-specific; Graft does not translate SQL.
 For MySQL 8.0+, DDL can partially commit on error. A dirty migration blocks further
-operations until manually repaired; see the framework's docs/MYSQL.md. App queries
+operations. Run `graft migrate:doctor`, then inspect and restore the actual database
+before using `graft migrate:repair --plan` and `--confirm`; see docs/MYSQL.md in
+the Graft framework. App queries
 still use the driver's database/sql API; setting the environment does not rewrite
 application code.
 

@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('amd64','arm64')][string]$Architecture = 'amd64',
-    [ValidatePattern('^(v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?)$')][string]$Version = '0.1.0-dev'
+    [ValidatePattern('^(v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?)$')][string]$Version = 'v0.2.4'
 )
 $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path -Parent $PSScriptRoot

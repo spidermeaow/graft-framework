@@ -241,3 +241,104 @@ func TestSessionConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestRecoveryPlanAndAudit(t *testing.T) {
+	db := testDB(t)
+	store := New(db)
+	runner := migration.Runner{Store: store}
+	ctx := context.Background()
+	bad := load(t, map[string]string{"1_partial.sql": "-- +graft Up\nCREATE TABLE partial (id INT); INSERT INTO missing_table VALUES (1);\n-- +graft Down\nDROP TABLE partial;"})
+	if err := runner.Up(ctx, bad); err == nil {
+		t.Fatal("expected partial failure")
+	}
+	dirty, err := store.Inspect(ctx)
+	if err != nil || len(dirty) != 1 || dirty[0].Direction != "up" || dirty[0].LastEvent != "failed" {
+		t.Fatal(dirty, err)
+	}
+	if _, err := store.RepairPlan(ctx, bad[0], "pending"); err != nil {
+		t.Fatal(err)
+	}
+	mutated := bad[0]
+	mutated.Checksum = strings.Repeat("0", 64)
+	if _, err := store.RepairPlan(ctx, mutated, "pending"); err == nil {
+		t.Fatal("checksum mismatch accepted")
+	}
+	if err := store.Repair(ctx, bad[0], "pending", ""); err == nil {
+		t.Fatal("missing audit note accepted")
+	}
+	if _, err := db.Exec("DROP TABLE partial"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Repair(ctx, bad[0], "pending", "restored schema from backup"); err != nil {
+		t.Fatal(err)
+	}
+	if dirty, err := store.Inspect(ctx); err != nil || len(dirty) != 0 {
+		t.Fatal(dirty, err)
+	}
+	var event, note string
+	if err := db.QueryRow("SELECT event,note FROM graft_migration_events ORDER BY id DESC LIMIT 1").Scan(&event, &note); err != nil || event != "repaired" || !strings.Contains(note, "restored schema") {
+		t.Fatal(event, note, err)
+	}
+	if _, err := runner.Status(ctx, bad); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRecoveryFailedDownMarkApplied(t *testing.T) {
+	db := testDB(t)
+	store := New(db)
+	runner := migration.Runner{Store: store}
+	ctx := context.Background()
+	m := load(t, map[string]string{"1_partial.sql": "-- +graft Up\nCREATE TABLE partial (id INT);\n-- +graft Down\nDROP TABLE partial; INSERT INTO missing_table VALUES (1);"})
+	if err := runner.Up(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Rollback(ctx, m, 1); err == nil {
+		t.Fatal("expected failed Down")
+	}
+	dirty, err := store.RepairPlan(ctx, m[0], "applied")
+	if err != nil || dirty.Direction != "down" {
+		t.Fatal(dirty, err)
+	}
+	if _, err := db.Exec("CREATE TABLE partial (id INT)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Repair(ctx, m[0], "applied", "restored fully applied table"); err != nil {
+		t.Fatal(err)
+	}
+	status, err := runner.Status(ctx, m)
+	if err != nil || status[0].Applied == nil {
+		t.Fatal(status, err)
+	}
+}
+
+func TestRecoveryInspectionDoesNotCreateTables(t *testing.T) {
+	db := testDB(t)
+	store := New(db)
+	ctx := context.Background()
+	dirty, err := store.Inspect(ctx)
+	if err != nil || len(dirty) != 0 {
+		t.Fatal(dirty, err)
+	}
+	var tables int
+	if err := db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name LIKE 'graft_migration%'").Scan(&tables); err != nil || tables != 0 {
+		t.Fatal(tables, err)
+	}
+	if _, err := db.Exec(createHistory); err != nil {
+		t.Fatal(err)
+	}
+	m := load(t, map[string]string{"1_partial.sql": "-- +graft Up\nCREATE TABLE partial (id INT);\n-- +graft Down\nDROP TABLE partial;"})
+	if _, err := db.Exec("INSERT INTO graft_migrations (version,name,batch,executed_at,execution_time,checksum,dirty) VALUES (?,?,?,?,?,?,'up')", m[0].Version, m[0].Name, 1, time.Now().UTC(), 0, m[0].Checksum); err != nil {
+		t.Fatal(err)
+	}
+	dirty, err = store.Inspect(ctx)
+	if err != nil || len(dirty) != 1 || dirty[0].LastEvent != "" {
+		t.Fatal(dirty, err)
+	}
+	if _, err := store.RepairPlan(ctx, m[0], "pending"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name LIKE 'graft_migration%'").Scan(&tables); err != nil || tables != 1 {
+		t.Fatal(tables, err)
+	}
+}

@@ -8,7 +8,7 @@ with Go's standard toolchain. It combines `net/http`, `http.ServeMux`,
 OpenAPI/Swagger documentation, and standalone application builds. There is no ORM,
 DI container, generated runtime, or required application architecture.
 
-Current release: **v0.2.3** · Go 1.26.6+ · Free and open source under the
+Current release: **v0.2.4** · Go 1.26.6+ · Free and open source under the
 [MIT License](LICENSE).
 
 `graft new` asks whether a project uses PostgreSQL or MySQL and writes the matching
@@ -16,13 +16,17 @@ Current release: **v0.2.3** · Go 1.26.6+ · Free and open source under the
 development-to-deployment flow, while generated projects remain ordinary Go modules
 that work with `go test`, `go build` and VS Code.
 
+Run `graft doctor` from a project to check the Go toolchain, dotenv syntax,
+runtime settings, local migrations, and—when `DATABASE_URL` is configured—the
+database connection. It never changes project files or migration history.
+
 ## Install and start
 
 Install Go 1.26.6 or newer on the development machine. Choose either the Windows
 Setup from [GitHub Releases](https://github.com/spidermeaow/graft-framework/releases/latest) or:
 
 ```sh
-go install github.com/spidermeaow/graft-framework/cmd/graft@v0.2.3
+go install github.com/spidermeaow/graft-framework/cmd/graft@v0.2.4
 graft new my-api
 cd my-api
 graft dev
@@ -35,7 +39,7 @@ directory to PATH if `graft` is not found after `go install`.
 To use only the library in an existing Go module:
 
 ```sh
-go get github.com/spidermeaow/graft-framework@v0.2.3
+go get github.com/spidermeaow/graft-framework@v0.2.4
 ```
 
 For framework development, use `graft new --framework <absolute-checkout-path> my-api`.
@@ -129,11 +133,11 @@ If your organization's policy blocks PowerShell scripts, use the manual build
 below and add its binary directory to your user PATH through Windows settings.
 
 `graft version` (also `--version` or `-v`) reports the CLI version, Go version and
-platform. Local development builds report `0.2.3-dev`; published `go install`
+platform. Local development builds report `0.2.4-dev`; published `go install`
 builds use their module version. Release builds may set it explicitly:
 
 ```powershell
-go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.2.3" -o bin/graft.exe ./cmd/graft
+go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.2.4" -o bin/graft.exe ./cmd/graft
 ```
 
 Re-run the installer after updating this checkout. `-InstallDir <path>` changes
@@ -357,7 +361,11 @@ The CLI enables `parseTime=true`, `loc=UTC` and `multiStatements=true` for migra
 Omitting DATABASE_DRIVER keeps PostgreSQL behavior. SQL files are dialect-specific;
 Graft does not translate SQL or application queries. MySQL DDL is not transactional:
 failed/interrupted operations leave a **dirty** history marker and block further
-migration operations until repaired. See [MySQL setup and recovery](docs/MYSQL.md).
+migration operations until repaired. Use `graft migrate:doctor` to inspect the
+failure and `graft migrate:repair --mark-pending VERSION --plan` to preview a
+history correction after restoring the database. These recovery commands are in
+the current source build; the v0.2.4 release includes these commands. See
+[MySQL setup and recovery](docs/MYSQL.md).
 
 ## OpenAPI and Swagger
 

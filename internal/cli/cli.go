@@ -26,14 +26,18 @@ Usage:
   graft version
   graft licenses
   graft install [--dir path] [--no-path]
-  graft new [--database postgres|mysql] [--module name] [--framework local-path] [--version v0.2.3] project-name
-  graft upgrade-project --version v0.2.3 [--apply]
+  graft new [--database postgres|mysql] [--module name] [--framework local-path] [--version v0.2.4] project-name
+  graft upgrade-project --version v0.2.4 [--apply]
+  graft doctor [--timeout 5s]
   graft dev [--package ./cmd/api] [--host 127.0.0.1]
   graft build [--package ./cmd/api] [--output path]
   graft publish --target linux-x64 [--package ./cmd/api] [--output path]
   graft make:migration [--dir migrations] migration_name
   graft migrate [--dir migrations] [--timeout 2m]
   graft migrate:status [--dir migrations] [--timeout 2m]
+  graft migrate:doctor [--dir migrations] [--timeout 2m]
+  graft migrate:repair --mark-pending VERSION|--mark-applied VERSION --plan
+  graft migrate:repair --mark-pending VERSION|--mark-applied VERSION --note REASON --confirm
   graft migrate:rollback [--dir migrations] [--step N] [--timeout 2m]
 
 Migration commands use DATABASE_DRIVER (postgres or mysql) and DATABASE_URL.
@@ -72,9 +76,11 @@ func run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer
 		err = newProject(ctx, args[1:], in, out, errOut)
 	case "upgrade-project":
 		err = upgradeProject(ctx, args[1:], out, errOut)
+	case "doctor":
+		err = doctorCommand(ctx, args[1:], out, errOut)
 	case "dev", "build", "publish":
 		err = goCommand(ctx, args[0], args[1:], out, errOut)
-	case "make:migration", "migrate", "migrate:status", "migrate:rollback":
+	case "make:migration", "migrate", "migrate:status", "migrate:doctor", "migrate:repair", "migrate:rollback":
 		err = migrationCommand(ctx, args[0], args[1:], out, errOut)
 	default:
 		return fmt.Errorf("unknown command %q; run graft help", args[0])

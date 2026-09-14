@@ -202,6 +202,13 @@ the target service. A short local result does not satisfy an unmeasured service 
 
 ## Migration, rollback and recovery
 
+Prefer expand/contract changes for live services: add a nullable column or new
+table, deploy application code that tolerates old and new shapes, backfill in
+bounded batches, switch reads/writes, then remove the old shape in a later
+release. Back up and test restoration before the rollout. On MySQL, DDL can
+commit even when a later statement fails; `graft migrate:doctor` and the
+reviewed `migrate:repair` flow are documented in [MYSQL.md](MYSQL.md).
+
 1. Back up using pg_dump (custom format) or the managed database's backup/PITR
    service. Encrypt backups and restrict access; verify retention and RPO/RTO.
 2. Restore into a separate database with pg_restore and exercise application reads

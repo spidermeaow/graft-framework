@@ -46,7 +46,20 @@ checksum CHAR(64) NOT NULL,
 dirty VARCHAR(4) NOT NULL DEFAULT ''
 ) ENGINE=InnoDB`
 
+const createEvents = `CREATE TABLE IF NOT EXISTS graft_migration_events (
+id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+version BIGINT NOT NULL,
+direction VARCHAR(4) NOT NULL,
+event VARCHAR(16) NOT NULL,
+created_at DATETIME(6) NOT NULL,
+note VARCHAR(1000) NOT NULL DEFAULT ''
+) ENGINE=InnoDB`
+
 func (s *Store) WithLock(ctx context.Context, fn func(migration.Session) error) (err error) {
+	return s.withLock(ctx, true, fn)
+}
+
+func (s *Store) withLock(ctx context.Context, initialize bool, fn func(migration.Session) error) (err error) {
 	if s.db == nil {
 		return errors.New("mysql: nil database")
 	}
@@ -97,13 +110,35 @@ func (s *Store) WithLock(ctx context.Context, fn func(migration.Session) error) 
 			err = errors.Join(err, unlockErr)
 		}
 	}()
-	if _, err = conn.ExecContext(ctx, createHistory); err != nil {
-		return fmt.Errorf("create migration history: %w", err)
+	if initialize {
+		if _, err = conn.ExecContext(ctx, createHistory); err != nil {
+			return fmt.Errorf("create migration history: %w", err)
+		}
+		if _, err = conn.ExecContext(ctx, createEvents); err != nil {
+			return fmt.Errorf("create migration event log: %w", err)
+		}
 	}
 	return fn(&session{conn: conn})
 }
 
 type session struct{ conn *sql.Conn }
+
+func (s *session) event(ctx context.Context, version int64, direction, event, note string) error {
+	_, err := s.conn.ExecContext(ctx, "INSERT INTO graft_migration_events (version,direction,event,created_at,note) VALUES (?,?,?,?,?)", version, direction, event, time.Now().UTC(), note)
+	return err
+}
+
+func failureNote(err error) string {
+	// SQL driver errors can include SQL fragments, which may contain secrets.
+	// The original error still reaches the caller; audit records only its type.
+	return fmt.Sprintf("SQL execution failed (%T); inspect command logs", err)
+}
+
+func (s *session) auditFailure(version int64, direction string, cause error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = s.event(ctx, version, direction, "failed", failureNote(cause))
+}
 
 func (s *session) History(ctx context.Context) ([]migration.Record, error) {
 	rows, err := s.conn.QueryContext(ctx, "SELECT version,name,batch,executed_at,execution_time,checksum,dirty FROM graft_migrations ORDER BY version")
@@ -152,11 +187,18 @@ func (s *session) Apply(ctx context.Context, m migration.Migration, batch int) (
 	if err != nil {
 		return r, err
 	}
+	if err = s.event(ctx, m.Version, "up", "started", ""); err != nil {
+		return r, errors.Join(&DirtyError{m.Version, "up"}, err)
+	}
 	start := time.Now()
 	if _, err = s.conn.ExecContext(ctx, m.Up); err != nil {
+		s.auditFailure(m.Version, "up", err)
 		return r, errors.Join(&DirtyError{m.Version, "up"}, err)
 	}
 	r.ExecutedAt, r.ExecutionTime = time.Now().UTC(), time.Since(start)
+	if err = s.event(ctx, m.Version, "up", "sql_done", ""); err != nil {
+		return r, errors.Join(&DirtyError{m.Version, "up"}, err)
+	}
 	err = changedOne(s.conn.ExecContext(ctx, "UPDATE graft_migrations SET dirty='',executed_at=?,execution_time=? WHERE version=? AND checksum=? AND dirty='up'", r.ExecutedAt, int64(r.ExecutionTime), r.Version, r.Checksum))
 	if err != nil {
 		return r, errors.Join(&DirtyError{m.Version, "up"}, err)
@@ -174,7 +216,14 @@ func (s *session) Revert(ctx context.Context, m migration.Migration) error {
 	if err := changedOne(s.conn.ExecContext(ctx, "UPDATE graft_migrations SET dirty='down' WHERE version=? AND checksum=? AND dirty=''", m.Version, m.Checksum)); err != nil {
 		return err
 	}
+	if err := s.event(ctx, m.Version, "down", "started", ""); err != nil {
+		return errors.Join(&DirtyError{m.Version, "down"}, err)
+	}
 	if _, err := s.conn.ExecContext(ctx, m.Down); err != nil {
+		s.auditFailure(m.Version, "down", err)
+		return errors.Join(&DirtyError{m.Version, "down"}, err)
+	}
+	if err := s.event(ctx, m.Version, "down", "sql_done", ""); err != nil {
 		return errors.Join(&DirtyError{m.Version, "down"}, err)
 	}
 	if err := changedOne(s.conn.ExecContext(ctx, "DELETE FROM graft_migrations WHERE version=? AND checksum=? AND dirty='down'", m.Version, m.Checksum)); err != nil {
