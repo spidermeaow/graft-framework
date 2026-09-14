@@ -16,6 +16,7 @@ type routeDoc struct {
 	Parameters  []parameterDoc         `json:"parameters,omitempty"`
 	RequestBody *bodyDoc               `json:"requestBody,omitempty"`
 	Responses   map[string]responseDoc `json:"responses"`
+	Security    []map[string][]string  `json:"security,omitempty"`
 }
 type parameterDoc struct {
 	Name     string         `json:"name"`
@@ -46,6 +47,11 @@ func Description(text string) RouteOption { return func(r *routeDoc) { r.Descrip
 
 // Tag appends an operation tag.
 func Tag(text string) RouteOption { return func(r *routeDoc) { r.Tags = append(r.Tags, text) } }
+
+// Security marks an operation as requiring a named OpenAPI security scheme.
+func Security(scheme string) RouteOption {
+	return func(r *routeDoc) { r.Security = append(r.Security, map[string][]string{scheme: {}}) }
+}
 
 // RequestBody documents a required JSON request body.
 func RequestBody(schema openapi.Schema) RouteOption {

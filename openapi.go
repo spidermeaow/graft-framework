@@ -66,11 +66,32 @@ func (a *App) OpenAPI(title, version string) ([]byte, error) {
 		}
 		paths[path][method] = r
 	}
+	schemes := map[string]map[string]string{}
+	for _, methods := range paths {
+		for _, route := range methods {
+			for _, requirement := range route.Security {
+				for name := range requirement {
+					switch name {
+					case "BearerAuth":
+						schemes[name] = map[string]string{"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+					case "ApiKeyAuth":
+						schemes[name] = map[string]string{"type": "apiKey", "in": "header", "name": "X-API-Key"}
+					default:
+						return nil, fmt.Errorf("unknown OpenAPI security scheme %q", name)
+					}
+				}
+			}
+		}
+	}
 	document := struct {
-		OpenAPI string                         `json:"openapi"`
-		Info    map[string]string              `json:"info"`
-		Paths   map[string]map[string]routeDoc `json:"paths"`
-	}{"3.0.3", map[string]string{"title": title, "version": version}, paths}
+		OpenAPI    string                         `json:"openapi"`
+		Info       map[string]string              `json:"info"`
+		Paths      map[string]map[string]routeDoc `json:"paths"`
+		Components map[string]any                 `json:"components,omitempty"`
+	}{OpenAPI: "3.0.3", Info: map[string]string{"title": title, "version": version}, Paths: paths}
+	if len(schemes) > 0 {
+		document.Components = map[string]any{"securitySchemes": schemes}
+	}
 	return json.MarshalIndent(document, "", "  ")
 }
 

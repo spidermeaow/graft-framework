@@ -118,6 +118,11 @@ type Group struct {
 	middleware []Middleware
 }
 
+// Use adds middleware to routes registered after this call.
+func (g *Group) Use(m ...Middleware) {
+	g.app.configure(func() { g.middleware = append(g.middleware, m...) })
+}
+
 // Group creates a route group. Prefixes must start with a slash.
 func (a *App) Group(prefix string, m ...Middleware) *Group {
 	if !strings.HasPrefix(prefix, "/") {

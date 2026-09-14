@@ -8,13 +8,17 @@ with Go's standard toolchain. It combines `net/http`, `http.ServeMux`,
 OpenAPI/Swagger documentation, and standalone application builds. There is no ORM,
 DI container, generated runtime, or required application architecture.
 
-Current release: **v0.2.4** · Go 1.26.6+ · Free and open source under the
+Current release: **v0.2.5** · Go 1.26.6+ · Free and open source under the
 [MIT License](LICENSE).
 
 `graft new` asks whether a project uses PostgreSQL or MySQL and writes the matching
 `.env.example`. `graft dev`, `graft build` and `graft publish` cover the normal
 development-to-deployment flow, while generated projects remain ordinary Go modules
 that work with `go test`, `go build` and VS Code.
+
+Optional [Toolkits](docs/TOOLKITS.md) provide API key/JWT authentication,
+authorization, request validation, pagination, problem responses, and HTTP test
+helpers. Import them only where needed.
 
 Run `graft doctor` from a project to check the Go toolchain, dotenv syntax,
 runtime settings, local migrations, and—when `DATABASE_URL` is configured—the
@@ -26,7 +30,7 @@ Install Go 1.26.6 or newer on the development machine. Choose either the Windows
 Setup from [GitHub Releases](https://github.com/spidermeaow/graft-framework/releases/latest) or:
 
 ```sh
-go install github.com/spidermeaow/graft-framework/cmd/graft@v0.2.4
+go install github.com/spidermeaow/graft-framework/cmd/graft@v0.2.5
 graft new my-api
 cd my-api
 graft dev
@@ -39,7 +43,7 @@ directory to PATH if `graft` is not found after `go install`.
 To use only the library in an existing Go module:
 
 ```sh
-go get github.com/spidermeaow/graft-framework@v0.2.4
+go get github.com/spidermeaow/graft-framework@v0.2.5
 ```
 
 For framework development, use `graft new --framework <absolute-checkout-path> my-api`.
@@ -133,11 +137,11 @@ If your organization's policy blocks PowerShell scripts, use the manual build
 below and add its binary directory to your user PATH through Windows settings.
 
 `graft version` (also `--version` or `-v`) reports the CLI version, Go version and
-platform. Local development builds report `0.2.4-dev`; published `go install`
+platform. Local development builds report `0.2.5-dev`; published `go install`
 builds use their module version. Release builds may set it explicitly:
 
 ```powershell
-go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.2.4" -o bin/graft.exe ./cmd/graft
+go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.2.5" -o bin/graft.exe ./cmd/graft
 ```
 
 Re-run the installer after updating this checkout. `-InstallDir <path>` changes

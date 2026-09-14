@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.5
+
+- Added optional `toolkit/auth`, `toolkit/validate`, `toolkit/api`, and
+  `toolkit/testkit` packages, plus group middleware and OpenAPI security metadata.
+
 ## v0.2.4
 
 - Added `migrate:doctor` and guarded `migrate:repair --plan` / `--confirm` for

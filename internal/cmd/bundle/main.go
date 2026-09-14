@@ -27,7 +27,7 @@ func run() error {
 		}
 		name := filepath.ToSlash(path)
 		if entry.IsDir() {
-			if name == "." || name == "openapi" || name == "migration" || strings.HasPrefix(name, "migration/") || name == "internal" || name == "internal/swaggerui" || name == "internal/swaggerui/assets" {
+			if name == "." || name == "openapi" || name == "migration" || strings.HasPrefix(name, "migration/") || name == "toolkit" || strings.HasPrefix(name, "toolkit/") || name == "internal" || name == "internal/swaggerui" || name == "internal/swaggerui/assets" {
 				return nil
 			}
 			return filepath.SkipDir
