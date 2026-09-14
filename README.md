@@ -18,7 +18,8 @@ that work with `go test`, `go build` and VS Code.
 
 Optional [Toolkits](docs/TOOLKITS.md) provide API key/JWT authentication,
 authorization, request validation, pagination, problem responses, and HTTP test
-helpers. Import them only where needed.
+helpers. Import them only where needed; existing applications keep working without
+changes.
 
 Run `graft doctor` from a project to check the Go toolchain, dotenv syntax,
 runtime settings, local migrations, and—when `DATABASE_URL` is configured—the
@@ -217,7 +218,8 @@ func main() {
 ```
 
 Methods: GET, POST, PUT, PATCH, DELETE and `Handle(method, path, handler)`.
-`Group(prefix, middleware...)` supports nesting. Middleware added first runs
+`Group(prefix, middleware...)` supports nesting and `group.Use(...)` adds middleware
+to routes registered afterward. Middleware added first runs
 first. Configure the app before serving; later registration panics. App itself is
 an `http.Handler`, so use it with `httptest` or your own `http.Server`.
 
@@ -256,6 +258,60 @@ server-owned `X-Request-ID`. For streaming, use `http.NewResponseController` wit
 `RunContext` and `Serve(ctx, listener)` support application-owned cancellation.
 Use a custom http.Server for TLS or different streaming/timeouts requirements.
 
+## Optional API Toolkits
+
+The `v0.2.5` Toolkits are ordinary Go packages under `toolkit/`. For example, an
+API key can protect a route and describe that requirement in Swagger:
+
+```go
+package main
+
+import (
+    "os"
+
+    "github.com/spidermeaow/graft-framework"
+    "github.com/spidermeaow/graft-framework/toolkit/auth"
+)
+
+func main() {
+    app := graft.New()
+    keyAuth := auth.APIKey(os.Getenv("API_KEY"), auth.Principal{
+        Subject: "service-a", Permissions: []string{"items:read"},
+    })
+    api := app.Group("/api")
+    api.Use(auth.Require(keyAuth), auth.RequirePermission("items:read"))
+    api.GET("/items", func(c *graft.Context) error {
+        return c.JSON(200, []string{"example"})
+    }, graft.Security("ApiKeyAuth"))
+    app.Docs("Example API", "1.0.0")
+    if err := app.Run(":8080"); err != nil { panic(err) }
+}
+```
+
+Set `API_KEY` to a secret of at least 16 bytes before starting the app. Clients
+send it in `X-API-Key`. The authentication middleware returns 401 for missing or
+invalid credentials; the permission middleware returns 403 when a verified
+identity lacks access. `auth.JWT` verifies HS256 or RS256 tokens against an
+explicit issuer and audience. `graft.Security("BearerAuth")` documents a JWT
+route in OpenAPI. Swagger metadata describes the requirement; it does not add
+authentication middleware automatically.
+
+For JSON DTOs, import `github.com/spidermeaow/graft-framework/toolkit/validate`.
+`validate.Bind` combines Graft's strict JSON binder with
+`required`, `min=N`, and `max=N` struct tags:
+
+```go
+type CreateItem struct {
+    Name string `json:"name" validate:"required,min=3,max=80"`
+}
+var input CreateItem
+if err := validate.Bind(c, &input); err != nil { return err }
+```
+
+`toolkit/api` has bounded `limit`/`offset` parsing and RFC 9457 problem responses;
+`toolkit/testkit` has JSON request/response helpers for handler tests. See the
+[Toolkit guide](docs/TOOLKITS.md) for details and limitations.
+
 ## SQL-first migrations
 
 Copy `.env.example` to `.env` in the project root and edit your database connection:
@@ -266,7 +322,7 @@ notepad .env
 graft migrate
 ```
 
-The CLI loads `.env` for migrate, migrate:status, migrate:rollback and dev.
+The CLI loads `.env` for `graft doctor`, migration commands and `graft dev`.
 Newly generated applications call `graft.LoadEnv()` before reading configuration,
 so their compiled binaries read `.env` beside the executable, including when launched
 from another working directory. They also read `.env` in the working directory; that
@@ -344,7 +400,7 @@ is running, then retry. This is separate from the database advisory lock.
 
 Do not put BEGIN/COMMIT/ROLLBACK in migration files: Graft manages execution.
 On PostgreSQL, nontransactional SQL (such as CREATE INDEX CONCURRENTLY), psql meta-commands,
-and COPY FROM STDIN are not supported in v0.1. Migration files are trusted code.
+and COPY FROM STDIN are not supported. Migration files are trusted code.
 The framework does not run migrations on application startup.
 
 For programmatic use, `migration.Load(fs, dir)` accepts disk or embedded files;
@@ -367,8 +423,8 @@ Graft does not translate SQL or application queries. MySQL DDL is not transactio
 failed/interrupted operations leave a **dirty** history marker and block further
 migration operations until repaired. Use `graft migrate:doctor` to inspect the
 failure and `graft migrate:repair --mark-pending VERSION --plan` to preview a
-history correction after restoring the database. These recovery commands are in
-the current source build; the v0.2.4 release includes these commands. See
+history correction after restoring the database. These recovery commands have
+been available since v0.2.4. See
 [MySQL setup and recovery](docs/MYSQL.md).
 
 ## OpenAPI and Swagger
@@ -389,7 +445,7 @@ app.POST("/users", createUser,
 )
 ```
 
-Additional metadata: Description, QueryParameter and PathParameter. Path
+Additional metadata: Description, QueryParameter, PathParameter and Security. Path
 parameters are discovered as required strings unless overridden. Schemas document
 the API; they do not validate request bodies. `app.OpenAPI(title, version)` exports
 JSON without serving it. Catch-all `{path...}` routes work for HTTP but are rejected
@@ -418,7 +474,7 @@ GOOS and GOARCH selected from:
 
 Use `--output path` to keep builds for multiple targets and `--package` to select a
 main package. Default package is ./cmd/api when it exists, otherwise the current
-directory. `graft dev` delegates to `go run`; no hot reload in v0.1. Generated
+directory. `graft dev` delegates to `go run`; it does not hot reload. Generated
 applications print their App and Swagger URLs at startup. On Windows, a startup
 error is also shown in a dialog so a double-clicked executable does not disappear
 before the error can be read. Copy the binary and companion files to the target
@@ -447,7 +503,7 @@ and [contributing conventions](CONTRIBUTING.md). The core HTTP package has no
 external Go dependencies. The CLI uses PostgreSQL and MySQL drivers; see
 [dependency decisions](docs/DEPENDENCIES.md).
 
-## Production controls (v0.2 prerelease)
+## Production controls
 
 Graft includes opt-in `ConcurrencyLimit`, `BodyLimit`, `RequestDeadline`, a
 process-local `RateLimit`, bounded `Metrics`, `Health` and configurable server
