@@ -15,6 +15,11 @@ The PostgreSQL adapter accepts any compatible database/sql driver. pq is chosen
 for its focused SQL interface and pure-Go cross compilation. Versions and hashes
 are pinned in go.mod/go.sum; upgrade via normal Go module tooling.
 
+Windows packaging uses the pinned build-time tool `github.com/akavel/rsrc v0.10.2`
+(MIT) to embed Graft's own application manifest. It is not linked into or shipped
+with Graft; the manifest marks the per-user Setup executable as Windows-aware so
+Program Compatibility Assistant does not apply its legacy-installer heuristic.
+
 MySQL driver sources are unmodified. Its MPL-2.0 license does not change Graft's
 MIT license. Driver licenses and source URLs are in `licenses/`, embedded in
 `graft licenses`, and installed as THIRD_PARTY_NOTICES.txt by Windows Setup.

@@ -16,6 +16,12 @@ try {
     $env:GOARCH = $null
     & go run ./internal/cmd/bundle
     if ($LASTEXITCODE -ne 0) { throw 'Framework bundle generation failed.' }
+    # A UAC/compatibility manifest tells Program Compatibility Assistant that
+    # Setup is a current per-user installer, preventing its legacy-installer
+    # heuristic from showing a false "might not have run correctly" dialog.
+    $resource = Join-Path $sourceRoot "cmd\setup\graftsetup_windows_$Architecture.syso"
+    & go run github.com/akavel/rsrc@v0.10.2 -manifest cmd/setup/graftsetup.manifest -arch $Architecture -o $resource
+    if ($LASTEXITCODE -ne 0) { throw 'Setup manifest resource generation failed.' }
     $env:GOOS = 'windows'
     $env:GOARCH = $Architecture
     $env:CGO_ENABLED = '0'
@@ -30,6 +36,10 @@ try {
     $setup = Join-Path $destination 'Setup.exe'
     & go build -trimpath -tags graftsetup -ldflags '-H=windowsgui' -o $setup ./cmd/setup
     if ($LASTEXITCODE -ne 0) { throw 'Setup build failed.' }
+    $setupText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($setup))
+    if (-not $setupText.Contains('requestedExecutionLevel') -or -not $setupText.Contains('Graft.Setup')) {
+        throw 'Setup manifest was not embedded.'
+    }
     Get-FileHash -LiteralPath $binary -Algorithm SHA256
     Get-FileHash -LiteralPath $setup -Algorithm SHA256
     Write-Host "Standalone installer: $setup"
