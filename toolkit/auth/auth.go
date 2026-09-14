@@ -39,11 +39,31 @@ type AuthenticatorFunc func(*http.Request) (Principal, error)
 
 func (f AuthenticatorFunc) Authenticate(r *http.Request) (Principal, error) { return f(r) }
 
+type documentedAuthenticator struct {
+	run      AuthenticatorFunc
+	metadata graft.OpenAPIMetadata
+}
+
+func (a documentedAuthenticator) Authenticate(r *http.Request) (Principal, error) { return a.run(r) }
+func (a documentedAuthenticator) OpenAPIMetadata() graft.OpenAPIMetadata          { return a.metadata }
+
 var ErrMissing = errors.New("missing credentials")
 var ErrInvalid = errors.New("invalid credentials")
 
 // Require rejects missing or invalid credentials with 401.
 func Require(a Authenticator) graft.Middleware { return authenticate(a, true) }
+
+// Required combines Require's runtime behavior with route metadata. Use it
+// with app/group.UseDocumented or graft.With on one route.
+func Required(a Authenticator) graft.DocumentedMiddleware {
+	metadata := graft.MiddlewareStatus(http.StatusUnauthorized, "Unauthorized")
+	if provider, ok := a.(graft.OpenAPIMetadataProvider); ok {
+		fromAuth := provider.OpenAPIMetadata()
+		metadata.Security = fromAuth.Security
+		metadata.SecuritySchemes = fromAuth.SecuritySchemes
+	}
+	return graft.Document(Require(a), graft.StaticMetadata(metadata))
+}
 
 // Optional permits missing credentials, but rejects invalid ones.
 func Optional(a Authenticator) graft.Middleware { return authenticate(a, false) }
@@ -73,9 +93,19 @@ func RequireRole(role string) graft.Middleware {
 	return authorize(func(p Principal) bool { return contains(p.Roles, role) })
 }
 
+// RequiredRole adds RequireRole's 403 response to route documentation.
+func RequiredRole(role string) graft.DocumentedMiddleware {
+	return graft.Document(RequireRole(role), graft.StaticMetadata(graft.MiddlewareStatus(403, "Forbidden")))
+}
+
 // RequirePermission permits a request if its verified principal has the permission.
 func RequirePermission(permission string) graft.Middleware {
 	return authorize(func(p Principal) bool { return contains(p.Permissions, permission) })
+}
+
+// RequiredPermission adds RequirePermission's 403 response to route documentation.
+func RequiredPermission(permission string) graft.DocumentedMiddleware {
+	return graft.Document(RequirePermission(permission), graft.StaticMetadata(graft.MiddlewareStatus(403, "Forbidden")))
 }
 
 func authorize(allowed func(Principal) bool) graft.Middleware {
@@ -120,7 +150,7 @@ func APIKey(key string, principal Principal) Authenticator {
 		panic("auth: API key must be at least 16 bytes and principal subject must be set")
 	}
 	want := sha256.Sum256([]byte(key))
-	return AuthenticatorFunc(func(r *http.Request) (Principal, error) {
+	return documentedAuthenticator{run: func(r *http.Request) (Principal, error) {
 		value := r.Header.Get("X-API-Key")
 		if value == "" {
 			return Principal{}, ErrMissing
@@ -130,7 +160,10 @@ func APIKey(key string, principal Principal) Authenticator {
 			return Principal{}, ErrInvalid
 		}
 		return principal, nil
-	})
+	}, metadata: graft.OpenAPIMetadata{
+		Security:        []map[string][]string{{"ApiKeyAuth": {}}},
+		SecuritySchemes: map[string]map[string]any{"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}},
+	}}
 }
 
 func bearer(r *http.Request) (string, error) {

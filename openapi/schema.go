@@ -4,6 +4,7 @@ package openapi
 
 // Schema describes JSON values using the common subset of OpenAPI 3.0 schemas.
 type Schema struct {
+	Ref                  string            `json:"$ref,omitempty"`
 	Type                 string            `json:"type,omitempty"`
 	Format               string            `json:"format,omitempty"`
 	Description          string            `json:"description,omitempty"`

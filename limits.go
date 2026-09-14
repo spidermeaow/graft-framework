@@ -104,3 +104,8 @@ func RateLimit(perSecond float64, burst int) Middleware {
 		})
 	}
 }
+
+// DocumentedRateLimit enforces a rate limit and contributes its 429 response to OpenAPI.
+func DocumentedRateLimit(perSecond float64, burst int) DocumentedMiddleware {
+	return Document(RateLimit(perSecond, burst), StaticMetadata(MiddlewareStatus(429, "Too Many Requests")))
+}

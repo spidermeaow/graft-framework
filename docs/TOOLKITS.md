@@ -15,8 +15,8 @@ keyAuth := auth.APIKey(os.Getenv("API_KEY"), auth.Principal{
     Subject: "service-a", Permissions: []string{"items:read"},
 })
 api := app.Group("/api")
-api.Use(auth.Require(keyAuth), auth.RequirePermission("items:read"))
-api.GET("/items", listItems, graft.Security("ApiKeyAuth"))
+api.UseDocumented(auth.Required(keyAuth), auth.RequiredPermission("items:read"))
+api.GET("/items", listItems)
 ```
 
 For JWT, use `auth.JWT(auth.JWTConfig{Issuer: ..., Audience: ...,
@@ -24,7 +24,8 @@ HMACSecret: ...})` with a secret of at least 32 bytes, or supply `RSAPublicKey`.
 The verifier checks signature, algorithm, issuer, audience, subject, expiration,
 and not-before. Obtain and rotate public keys in your application until JWKS
 support is added. `auth.Optional` accepts absent credentials but rejects invalid
-ones. `graft.Security("BearerAuth")` documents a protected route in Swagger.
+ones. `auth.Required` attaches security and 401 metadata automatically; see the
+[OpenAPI metadata guide](OPENAPI_METADATA.md) for group, route, and custom drivers.
 
 ## Request validation
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.6
+
+- Added context-aware OpenAPI metadata for documented middleware, routes and
+  handlers, with generic component registration and deduplicated merge rules.
+- Added automatic Bearer/API Key metadata in the auth toolkit and documented
+  rate-limit responses, while preserving existing route options and middleware.
+
 ## v0.2.5
 
 - Added optional `toolkit/auth`, `toolkit/validate`, `toolkit/api`, and

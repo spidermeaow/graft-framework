@@ -8,7 +8,7 @@ with Go's standard toolchain. It combines `net/http`, `http.ServeMux`,
 OpenAPI/Swagger documentation, and standalone application builds. There is no ORM,
 DI container, generated runtime, or required application architecture.
 
-Current release: **v0.2.5** · Go 1.26.6+ · Free and open source under the
+Current release: **v0.2.6** · Go 1.26.6+ · Free and open source under the
 [MIT License](LICENSE).
 
 `graft new` asks whether a project uses PostgreSQL or MySQL and writes the matching
@@ -31,7 +31,7 @@ Install Go 1.26.6 or newer on the development machine. Choose either the Windows
 Setup from [GitHub Releases](https://github.com/spidermeaow/graft-framework/releases/latest) or:
 
 ```sh
-go install github.com/spidermeaow/graft-framework/cmd/graft@v0.2.5
+go install github.com/spidermeaow/graft-framework/cmd/graft@v0.2.6
 graft new my-api
 cd my-api
 graft dev
@@ -44,7 +44,7 @@ directory to PATH if `graft` is not found after `go install`.
 To use only the library in an existing Go module:
 
 ```sh
-go get github.com/spidermeaow/graft-framework@v0.2.5
+go get github.com/spidermeaow/graft-framework@v0.2.6
 ```
 
 For framework development, use `graft new --framework <absolute-checkout-path> my-api`.
@@ -138,11 +138,11 @@ If your organization's policy blocks PowerShell scripts, use the manual build
 below and add its binary directory to your user PATH through Windows settings.
 
 `graft version` (also `--version` or `-v`) reports the CLI version, Go version and
-platform. Local development builds report `0.2.5-dev`; published `go install`
+platform. Local development builds report `0.2.6-dev`; published `go install`
 builds use their module version. Release builds may set it explicitly:
 
 ```powershell
-go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.2.5" -o bin/graft.exe ./cmd/graft
+go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.2.6" -o bin/graft.exe ./cmd/graft
 ```
 
 Re-run the installer after updating this checkout. `-InstallDir <path>` changes
@@ -260,7 +260,7 @@ Use a custom http.Server for TLS or different streaming/timeouts requirements.
 
 ## Optional API Toolkits
 
-The `v0.2.5` Toolkits are ordinary Go packages under `toolkit/`. For example, an
+The Toolkits introduced in `v0.2.5` are ordinary Go packages under `toolkit/`. For example, an
 API key can protect a route and describe that requirement in Swagger:
 
 ```go
@@ -279,10 +279,10 @@ func main() {
         Subject: "service-a", Permissions: []string{"items:read"},
     })
     api := app.Group("/api")
-    api.Use(auth.Require(keyAuth), auth.RequirePermission("items:read"))
+    api.UseDocumented(auth.Required(keyAuth), auth.RequiredPermission("items:read"))
     api.GET("/items", func(c *graft.Context) error {
         return c.JSON(200, []string{"example"})
-    }, graft.Security("ApiKeyAuth"))
+    })
     app.Docs("Example API", "1.0.0")
     if err := app.Run(":8080"); err != nil { panic(err) }
 }
@@ -293,8 +293,9 @@ send it in `X-API-Key`. The authentication middleware returns 401 for missing or
 invalid credentials; the permission middleware returns 403 when a verified
 identity lacks access. `auth.JWT` verifies HS256 or RS256 tokens against an
 explicit issuer and audience. `graft.Security("BearerAuth")` documents a JWT
-route in OpenAPI. Swagger metadata describes the requirement; it does not add
-authentication middleware automatically.
+route in OpenAPI. `auth.Required` contributes the requirement automatically when
+registered with `UseDocumented` or `graft.With`; `graft.Security` remains available
+for explicit documentation but does not add runtime authentication.
 
 For JSON DTOs, import `github.com/spidermeaow/graft-framework/toolkit/validate`.
 `validate.Bind` combines Graft's strict JSON binder with
@@ -451,6 +452,8 @@ the API; they do not validate request bodies. `app.OpenAPI(title, version)` expo
 JSON without serving it. Catch-all `{path...}` routes work for HTTP but are rejected
 by OpenAPI generation, since OpenAPI cannot describe them faithfully.
 Documentation endpoints currently assume the app is mounted at the origin root.
+See [context-aware OpenAPI metadata](docs/OPENAPI_METADATA.md) for middleware and
+route providers, merge rules, shared components and custom security drivers.
 
 ## Build and publish
 

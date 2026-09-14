@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/spidermeaow/graft-framework"
 )
 
 // JWTConfig verifies HS256 or RS256 tokens with explicit issuer and audience.
@@ -31,7 +33,7 @@ func JWT(cfg JWTConfig) Authenticator {
 	if clock == nil {
 		clock = time.Now
 	}
-	return AuthenticatorFunc(func(r *http.Request) (Principal, error) {
+	return documentedAuthenticator{run: func(r *http.Request) (Principal, error) {
 		token, err := bearer(r)
 		if err != nil {
 			return Principal{}, err
@@ -101,5 +103,8 @@ func JWT(cfg JWTConfig) Authenticator {
 			return Principal{}, ErrInvalid
 		}
 		return Principal{Subject: claims.Subject, Roles: claims.Roles, Permissions: claims.Permissions}, nil
-	})
+	}, metadata: graft.OpenAPIMetadata{
+		Security:        []map[string][]string{{"BearerAuth": {}}},
+		SecuritySchemes: map[string]map[string]any{"BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}},
+	}}
 }

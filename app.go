@@ -20,6 +20,7 @@ type App struct {
 	serving      bool
 	handler      http.Handler
 	middleware   []Middleware
+	metadata     []OpenAPIMetadata
 	errorHandler ErrorHandler
 	routes       []routeDoc
 }
@@ -40,6 +41,19 @@ func (a *App) configure(fn func()) {
 
 // Use adds application middleware in execution order.
 func (a *App) Use(m ...Middleware) { a.configure(func() { a.middleware = append(a.middleware, m...) }) }
+
+// UseDocumented adds app-wide middleware and OpenAPI metadata to every route.
+func (a *App) UseDocumented(components ...DocumentedMiddleware) {
+	a.configure(func() {
+		if len(a.routes) != 0 {
+			panic("graft: register app-wide documented middleware before routes")
+		}
+		for _, component := range components {
+			a.middleware = append(a.middleware, component.Middleware())
+			a.metadata = append(a.metadata, cloneMetadata(component.OpenAPIMetadata()))
+		}
+	})
+}
 
 // SetErrorHandler replaces the centralized error handler.
 func (a *App) SetErrorHandler(h ErrorHandler) {
@@ -74,10 +88,10 @@ func chain(h http.Handler, m []Middleware) http.Handler {
 // Handle registers a method and a Go ServeMux path pattern. Invalid or conflicting
 // patterns panic, just as they do with http.ServeMux.
 func (a *App) Handle(method, path string, h Handler, opts ...RouteOption) {
-	a.add(method, path, h, nil, opts)
+	a.add(method, path, h, nil, nil, opts)
 }
 
-func (a *App) add(method, path string, h Handler, middleware []Middleware, opts []RouteOption) {
+func (a *App) add(method, path string, h Handler, middleware []Middleware, groupMetadata []OpenAPIMetadata, opts []RouteOption) {
 	if h == nil {
 		panic("graft: nil handler")
 	}
@@ -85,13 +99,14 @@ func (a *App) add(method, path string, h Handler, middleware []Middleware, opts 
 		panic("graft: invalid method or path")
 	}
 	a.configure(func() {
-		doc := newRouteDoc(method, path, opts)
+		doc := newRouteDoc(method, path, append(append([]OpenAPIMetadata(nil), a.metadata...), groupMetadata...), opts)
+		allMiddleware := append(append([]Middleware(nil), middleware...), doc.middleware...)
 		a.mux.Handle(method+" "+path, chain(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c := &Context{request: r, response: w}
 			if err := h(c); err != nil {
 				a.errorHandler(c, err)
 			}
-		}), middleware))
+		}), allMiddleware))
 		a.routes = append(a.routes, doc)
 	})
 }
@@ -116,11 +131,22 @@ type Group struct {
 	app        *App
 	prefix     string
 	middleware []Middleware
+	metadata   []OpenAPIMetadata
 }
 
 // Use adds middleware to routes registered after this call.
 func (g *Group) Use(m ...Middleware) {
 	g.app.configure(func() { g.middleware = append(g.middleware, m...) })
+}
+
+// UseDocumented adds middleware and metadata to routes registered afterward.
+func (g *Group) UseDocumented(components ...DocumentedMiddleware) {
+	g.app.configure(func() {
+		for _, component := range components {
+			g.middleware = append(g.middleware, component.Middleware())
+			g.metadata = append(g.metadata, cloneMetadata(component.OpenAPIMetadata()))
+		}
+	})
 }
 
 // Group creates a route group. Prefixes must start with a slash.
@@ -133,12 +159,14 @@ func (a *App) Group(prefix string, m ...Middleware) *Group {
 
 // Group creates a nested group, inheriting the parent's middleware.
 func (g *Group) Group(prefix string, m ...Middleware) *Group {
-	return g.app.Group(g.prefix+prefix, append(append([]Middleware(nil), g.middleware...), m...)...)
+	child := g.app.Group(g.prefix+prefix, append(append([]Middleware(nil), g.middleware...), m...)...)
+	child.metadata = append([]OpenAPIMetadata(nil), g.metadata...)
+	return child
 }
 
 // Handle registers a route within this group.
 func (g *Group) Handle(method, p string, h Handler, o ...RouteOption) {
-	g.app.add(method, g.prefix+p, h, g.middleware, o)
+	g.app.add(method, g.prefix+p, h, g.middleware, g.metadata, o)
 }
 
 // GET registers a group GET route.

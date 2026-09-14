@@ -17,13 +17,28 @@ type routeDoc struct {
 	RequestBody *bodyDoc               `json:"requestBody,omitempty"`
 	Responses   map[string]responseDoc `json:"responses"`
 	Security    []map[string][]string  `json:"security,omitempty"`
+	OperationID string                 `json:"operationId,omitempty"`
+	Deprecated  bool                   `json:"deprecated,omitempty"`
+	components  OpenAPIMetadata
+	metadataErr error
+	middleware  []Middleware
 }
 type parameterDoc struct {
 	Name     string         `json:"name"`
 	In       string         `json:"in"`
 	Required bool           `json:"required"`
 	Schema   openapi.Schema `json:"schema"`
+	Ref      string         `json:"$ref,omitempty"`
 }
+
+func (p parameterDoc) MarshalJSON() ([]byte, error) {
+	if p.Ref != "" {
+		return json.Marshal(map[string]string{"$ref": p.Ref})
+	}
+	type plain parameterDoc
+	return json.Marshal(plain(p))
+}
+
 type mediaDoc struct {
 	Schema openapi.Schema `json:"schema"`
 }
@@ -34,6 +49,15 @@ type bodyDoc struct {
 type responseDoc struct {
 	Description string              `json:"description"`
 	Content     map[string]mediaDoc `json:"content,omitempty"`
+	Ref         string              `json:"$ref,omitempty"`
+}
+
+func (r responseDoc) MarshalJSON() ([]byte, error) {
+	if r.Ref != "" {
+		return json.Marshal(map[string]string{"$ref": r.Ref})
+	}
+	type plain responseDoc
+	return json.Marshal(plain(r))
 }
 
 // RouteOption adds explicit documentation metadata to a route.
@@ -46,11 +70,22 @@ func Summary(text string) RouteOption { return func(r *routeDoc) { r.Summary = t
 func Description(text string) RouteOption { return func(r *routeDoc) { r.Description = text } }
 
 // Tag appends an operation tag.
-func Tag(text string) RouteOption { return func(r *routeDoc) { r.Tags = append(r.Tags, text) } }
+func Tag(text string) RouteOption {
+	return func(r *routeDoc) {
+		if !hasString(r.Tags, text) {
+			r.Tags = append(r.Tags, text)
+		}
+	}
+}
 
 // Security marks an operation as requiring a named OpenAPI security scheme.
 func Security(scheme string) RouteOption {
-	return func(r *routeDoc) { r.Security = append(r.Security, map[string][]string{scheme: {}}) }
+	return func(r *routeDoc) {
+		r.apply(OpenAPIMetadata{Security: []map[string][]string{{scheme: {}}}})
+		if legacy := legacySecurityScheme(scheme); legacy != nil {
+			r.apply(OpenAPIMetadata{SecuritySchemes: map[string]map[string]any{scheme: legacy}})
+		}
+	}
 }
 
 // RequestBody documents a required JSON request body.
@@ -67,7 +102,7 @@ func Response(status int, description string, schema openapi.Schema) RouteOption
 	}
 	return func(r *routeDoc) {
 		response := responseDoc{Description: description}
-		if schema.Type != "" {
+		if schema.Type != "" || schema.Ref != "" {
 			response.Content = map[string]mediaDoc{"application/json": {Schema: schema}}
 		}
 		r.Responses[strconv.Itoa(status)] = response
@@ -88,8 +123,11 @@ func PathParameter(name string, schema openapi.Schema) RouteOption {
 	}
 }
 
-func newRouteDoc(method, path string, options []RouteOption) routeDoc {
+func newRouteDoc(method, path string, metadata []OpenAPIMetadata, options []RouteOption) routeDoc {
 	r := routeDoc{method: method, path: path, Responses: map[string]responseDoc{}}
+	for _, item := range metadata {
+		r.apply(item)
+	}
 	for _, option := range options {
 		option(&r)
 	}
@@ -106,5 +144,8 @@ func newRouteDoc(method, path string, options []RouteOption) routeDoc {
 		panic(err)
 	}
 	snapshot.method, snapshot.path = method, path
+	snapshot.components = cloneMetadata(r.components)
+	snapshot.metadataErr = r.metadataErr
+	snapshot.middleware = append([]Middleware(nil), r.middleware...)
 	return snapshot
 }
