@@ -23,7 +23,7 @@ func run() error {
 	app.GET("/{$}", func(c *graft.Context) error {
 		return c.JSON(200, map[string]string{"message": "Hello Graft"})
 	}, graft.Summary("Welcome"), graft.Tag("Application"))
-	if cfg.Docs { app.Docs("{{.Name}}", "0.1.0") }
+	if cfg.Docs { app.Docs("{{.Name}}", "{{.Version}}") }
 	graft.PrintStartupAddress(cfg.Address(), cfg.Docs)
 	return app.RunWithConfig(cfg.Address(), graft.ServerConfig{WriteTimeout: cfg.RequestTimeout + 5*time.Second})
 }
@@ -39,7 +39,7 @@ func run() error {
  app := graft.New()
  app.Use(graft.RequestID(), graft.Logger(), graft.Recovery())
  app.GET("/{$}", func(c *graft.Context) error { return c.JSON(200, map[string]string{"message":"Hello Graft"}) }, graft.Summary("Welcome"), graft.Tag("Application"))
- app.Docs("{{.Name}}", "0.1.0")
+ app.Docs("{{.Name}}", "{{.Version}}")
  port := os.Getenv("APP_PORT"); if port == "" { port = "8080" }
  graft.PrintStartup(port)
  return app.Run(":" + port)

@@ -2,7 +2,7 @@
 
 Windows Setup, portable executables and `go install` distribute the same CLI.
 New projects require the CLI's release version of the public framework module.
-Development builds default to v0.1.0; `new --version` overrides it and
+Development builds default to v0.2.0; `new --version` overrides it and
 `new --framework` explicitly selects a local checkout.
 
 Generation runs `go mod tidy` to prepare go.sum and editor tooling. Failure keeps

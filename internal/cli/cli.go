@@ -26,8 +26,8 @@ Usage:
   graft version
   graft licenses
   graft install [--dir path] [--no-path]
-  graft new [--module name] [--framework local-path] [--version v0.1.0] project-name
-  graft upgrade-project --version v0.1.0 [--apply]
+  graft new [--database postgres|mysql] [--module name] [--framework local-path] [--version v0.2.0] project-name
+  graft upgrade-project --version v0.2.0 [--apply]
   graft dev [--package ./cmd/api] [--host 127.0.0.1]
   graft build [--package ./cmd/api] [--output path]
   graft publish --target linux-x64 [--package ./cmd/api] [--output path]
@@ -43,6 +43,16 @@ Publish targets: linux-x64, linux-arm64, windows-x64, windows-arm64, darwin-x64,
 
 // Run executes a CLI command. It returns errors instead of exiting the process.
 func Run(ctx context.Context, args []string, out, errOut io.Writer) error {
+	return run(ctx, args, nil, out, errOut)
+}
+
+// RunInteractive executes a command with a reader for prompts. Command binaries
+// should use this; Run stays deterministic for callers that embed the CLI.
+func RunInteractive(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer) error {
+	return run(ctx, args, in, out, errOut)
+}
+
+func run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		_, err := io.WriteString(out, usage)
 		return err
@@ -59,7 +69,7 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	case "version", "--version", "-v":
 		err = versionCommand(args[1:], out, errOut)
 	case "new":
-		err = newProject(ctx, args[1:], out, errOut)
+		err = newProject(ctx, args[1:], in, out, errOut)
 	case "upgrade-project":
 		err = upgradeProject(ctx, args[1:], out, errOut)
 	case "dev", "build", "publish":

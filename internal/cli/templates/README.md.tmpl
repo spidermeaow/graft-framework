@@ -6,7 +6,7 @@ Both commands place the binary, `.env.example` and this README in `bin/` by defa
 When the app starts it prints its App and Swagger URLs. On Windows, startup errors
 also appear in a dialog when the executable was opened by double-clicking it.
 
-Copy `.env.example` to `.env` and edit APP_PORT, DATABASE_DRIVER and DATABASE_URL. The generated
+This project starts with {{.Database.Name}} migration configuration. Copy `.env.example` to `.env` and edit APP_PORT and DATABASE_URL. The generated
 application reads `.env` beside its executable and also the current working directory;
 the latter wins if both exist. `graft dev` and migration commands read the working
 directory. Existing environment variables take precedence, including empty values.
@@ -17,12 +17,12 @@ sections, then run `graft migrate`. Inspect `graft migrate:status`; undo the mos
 recent batch with `graft migrate:rollback`, or individual migrations with `--step N`.
 Applied migrations must not be edited or removed.
 
-PostgreSQL is the default. For MySQL 8.0+, set DATABASE_DRIVER=mysql and use
-DATABASE_URL=user:password@tcp(localhost:3306)/database. Write MySQL SQL in the
-Up/Down sections; Graft does not convert PostgreSQL SQL. MySQL DDL can partially
-commit on error. A dirty migration blocks further operations until manually
-repaired; see the framework's docs/MYSQL.md. App queries still use the driver's
-database/sql API; setting the environment does not rewrite application code.
+Use `graft new --database postgres` or `graft new --database mysql` in scripts to
+skip the selector. SQL files are database-specific; Graft does not translate SQL.
+For MySQL 8.0+, DDL can partially commit on error. A dirty migration blocks further
+operations until manually repaired; see the framework's docs/MYSQL.md. App queries
+still use the driver's database/sql API; setting the environment does not rewrite
+application code.
 
 Projects use the released Graft Go module, so VS Code, `go test` and `go build`
 work normally. `graft dev`, `graft build` and `graft publish` remain convenient

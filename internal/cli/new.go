@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"embed"
@@ -23,8 +24,18 @@ var projectName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 var moduleName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._~/-]*$`)
 var versionName = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?$`)
 
-func newProject(ctx context.Context, args []string, out, errOut io.Writer) error {
+type databaseChoice struct {
+	Name, Driver, URL string
+}
+
+var databases = map[string]databaseChoice{
+	"postgres": {"PostgreSQL", "postgres", "postgres://postgres:postgres@localhost:5432/%s?sslmode=disable"},
+	"mysql":    {"MySQL", "mysql", "user:password@tcp(localhost:3306)/%s"},
+}
+
+func newProject(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer) error {
 	f := flags("new", errOut)
+	database := f.String("database", "", "database for migration configuration: postgres or mysql")
 	module := f.String("module", "", "Go module path")
 	framework := f.String("framework", "", "local framework checkout")
 	version := f.String("version", frameworkVersion(), "framework module version")
@@ -45,6 +56,10 @@ func newProject(ctx context.Context, args []string, out, errOut io.Writer) error
 	if !versionName.MatchString(*version) {
 		return errors.New("invalid framework version")
 	}
+	choice, err := selectDatabase(*database, in, out)
+	if err != nil {
+		return err
+	}
 	replace := ""
 	if *framework != "" {
 		path, err := filepath.Abs(*framework)
@@ -58,8 +73,9 @@ func newProject(ctx context.Context, args []string, out, errOut io.Writer) error
 	}
 	data := struct {
 		Name, Module, Version, Replace string
+		Database                       databaseChoice
 		Modern                         bool
-	}{name, *module, *version, replace, *framework != "" || modernFramework(*version)}
+	}{name, *module, *version, replace, choice, *framework != "" || modernFramework(*version)}
 	files := map[string]string{"main.go.tmpl": "cmd/api/main.go", "go.mod.tmpl": "go.mod", "README.md.tmpl": "README.md", "env.tmpl": ".env.example", "gitignore.tmpl": ".gitignore"}
 	// Render before making any filesystem changes; a pre-existing target is never overwritten.
 	rendered := map[string][]byte{}
@@ -100,11 +116,45 @@ func newProject(ctx context.Context, args []string, out, errOut io.Writer) error
 			return fmt.Errorf("project created in %s, but dependency setup failed: %w; ensure Go is installed and framework %s is published, then run go mod tidy inside the project", name, err, *version)
 		}
 	}
-	fmt.Fprintf(out, "Created %s\n\n  cd %s\n  graft dev\n", name, name)
+	fmt.Fprintf(out, "Created %s (%s)\n\n  cd %s\n  graft dev\n", name, choice.Name, name)
 	if replace != "" {
 		fmt.Fprintln(out, "Using local Graft checkout:", *framework)
 	}
 	return nil
+}
+
+func selectDatabase(value string, in io.Reader, out io.Writer) (databaseChoice, error) {
+	if value != "" {
+		choice, ok := databases[strings.ToLower(value)]
+		if !ok {
+			return databaseChoice{}, errors.New("invalid --database; use postgres or mysql")
+		}
+		return choice, nil
+	}
+	// Library callers use the historical PostgreSQL default. The command binary
+	// supplies stdin and therefore always asks before it creates project files.
+	if in == nil {
+		return databases["postgres"], nil
+	}
+	reader := bufio.NewReader(in)
+	for {
+		fmt.Fprintln(out, "Choose a database for migrations:")
+		fmt.Fprintln(out, "  1) PostgreSQL (default)")
+		fmt.Fprintln(out, "  2) MySQL")
+		fmt.Fprint(out, "Select [1]: ")
+		answer, err := reader.ReadString('\n')
+		if err != nil && len(answer) == 0 {
+			return databaseChoice{}, errors.New("database selection was not provided; use --database postgres or --database mysql")
+		}
+		switch strings.ToLower(strings.TrimSpace(answer)) {
+		case "", "1", "postgres", "postgresql":
+			return databases["postgres"], nil
+		case "2", "mysql":
+			return databases["mysql"], nil
+		default:
+			fmt.Fprintln(out, "Please enter 1 for PostgreSQL or 2 for MySQL.")
+		}
+	}
 }
 
 func isFramework(path string) bool {

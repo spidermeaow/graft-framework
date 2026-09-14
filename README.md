@@ -15,7 +15,7 @@ Install Go 1.26.6 or newer on the development machine. Choose either the Windows
 Setup from [GitHub Releases](https://github.com/spidermeaow/graft-framework/releases/latest) or:
 
 ```sh
-go install github.com/spidermeaow/graft-framework/cmd/graft@v0.1.0
+go install github.com/spidermeaow/graft-framework/cmd/graft@v0.2.0
 graft new my-api
 cd my-api
 graft dev
@@ -28,7 +28,7 @@ directory to PATH if `graft` is not found after `go install`.
 To use only the library in an existing Go module:
 
 ```sh
-go get github.com/spidermeaow/graft-framework@v0.1.0
+go get github.com/spidermeaow/graft-framework@v0.2.0
 ```
 
 For framework development, use `graft new --framework <absolute-checkout-path> my-api`.
@@ -97,6 +97,11 @@ are currently unsigned; no Windows code-signing certificate is configured.
 Requires Go 1.26.6 or later. A database is needed only for database applications
 and migration commands.
 
+`graft new` asks whether the project uses PostgreSQL or MySQL, then writes the
+matching DATABASE_DRIVER and DATABASE_URL to `.env.example`. For scripts, make the
+choice explicit: `graft new --database postgres my-api` or
+`graft new --database mysql my-api`.
+
 ### Install the Windows CLI
 
 From this checkout in PowerShell:
@@ -117,7 +122,7 @@ If your organization's policy blocks PowerShell scripts, use the manual build
 below and add its binary directory to your user PATH through Windows settings.
 
 `graft version` (also `--version` or `-v`) reports the CLI version, Go version and
-platform. Local development builds report `0.1.0-dev`; published `go install`
+platform. Local development builds report `0.2.0-dev`; published `go install`
 builds use their module version. Release builds may set it explicitly:
 
 ```powershell
@@ -166,7 +171,7 @@ before release. `new --module example.com/my-api` names the application module;
 `--version` selects a published framework version.
 
 For old embedded/local projects, see [migration and release instructions](docs/RELEASING.md).
-`graft upgrade-project --version v0.1.0` previews the migration; adding `--apply`
+`graft upgrade-project --version v0.2.0` previews the migration; adding `--apply`
 verifies, backs up and updates dependency files. Updating the CLI alone does not
 change the framework version pinned in a standard project's `go.mod`.
 

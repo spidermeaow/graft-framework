@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -40,6 +41,54 @@ func TestExplicitVersionUsesPublishedModule(t *testing.T) {
 	}
 	if strings.Contains(string(data), "replace") || !strings.Contains(string(data), "v0.2.0") {
 		t.Fatal(string(data))
+	}
+}
+
+func TestInteractiveDatabaseSelection(t *testing.T) {
+	for _, tt := range []struct {
+		name, input, driver, url string
+	}{
+		{"postgres default", "\n", "DATABASE_DRIVER=postgres", "postgres://postgres:postgres@localhost:5432/postgres-api?sslmode=disable"},
+		{"mysql number", "2\n", "DATABASE_DRIVER=mysql", "user:password@tcp(localhost:3306)/mysql-api"},
+		{"retry invalid", "wrong\nmysql\n", "DATABASE_DRIVER=mysql", "user:password@tcp(localhost:3306)/mysql-api"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			name := "mysql-api"
+			if tt.driver == "DATABASE_DRIVER=postgres" {
+				name = "postgres-api"
+			}
+			var out bytes.Buffer
+			err := RunInteractive(context.Background(), []string{"new", "--download=false", name}, strings.NewReader(tt.input), &out, &out)
+			if err != nil {
+				t.Fatal(err, out.String())
+			}
+			env, err := os.ReadFile(filepath.Join(name, ".env.example"))
+			if err != nil || !strings.Contains(string(env), tt.driver) || !strings.Contains(string(env), tt.url) {
+				t.Fatalf("%s: %v", env, err)
+			}
+			if !strings.Contains(out.String(), "Choose a database") {
+				t.Fatal(out.String())
+			}
+		})
+	}
+}
+
+func TestNewDatabaseFlagAndNonInteractiveInput(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var out bytes.Buffer
+	if err := RunInteractive(context.Background(), []string{"new", "--download=false", "--database", "mysql", "flag-api"}, strings.NewReader(""), &out, &out); err != nil {
+		t.Fatal(err)
+	}
+	env, err := os.ReadFile("flag-api/.env.example")
+	if err != nil || !strings.Contains(string(env), "DATABASE_DRIVER=mysql") {
+		t.Fatal(string(env), err)
+	}
+	if _, err := selectDatabase("sqlite", nil, io.Discard); err == nil {
+		t.Fatal("invalid database accepted")
+	}
+	if _, err := selectDatabase("", strings.NewReader(""), io.Discard); err == nil {
+		t.Fatal("missing interactive selection accepted")
 	}
 }
 
