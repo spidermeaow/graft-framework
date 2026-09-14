@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Organized OpenAPI metadata, security merge, Swagger serving, and migration CLI
+  helpers by responsibility without changing the public API or runtime behavior.
+
 ## v0.2.6
 
 - Added context-aware OpenAPI metadata for documented middleware, routes and

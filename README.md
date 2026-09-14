@@ -502,7 +502,8 @@ uniquely named database; it never migrates the database named by the URL.
 CI runs these tests against a PostgreSQL service. Without the variable they skip.
 
 See [ADRs](docs/adr), [dependency rationale and upstream licenses](docs/DEPENDENCIES.md),
-and [contributing conventions](CONTRIBUTING.md). The core HTTP package has no
+the [codebase map](docs/ARCHITECTURE.md), and
+[contributing conventions](CONTRIBUTING.md). The core HTTP package has no
 external Go dependencies. The CLI uses PostgreSQL and MySQL drivers; see
 [dependency decisions](docs/DEPENDENCIES.md).
 
