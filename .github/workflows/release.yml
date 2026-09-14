@@ -141,7 +141,7 @@ jobs:
           done
           cd "$RUNNER_TEMP"
           "$GOBIN/graft" version
-          "$GOBIN/graft" new release-check
+          "$GOBIN/graft" new --database postgres release-check
           cd release-check
           test ! -e go.work
           test ! -e .graft
