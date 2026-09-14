@@ -15,6 +15,14 @@ var filename = regexp.MustCompile(`^([0-9]+)_([a-z][a-z0-9_]*)\.sql$`)
 // Load reads SQL files in dir, checks versions/markers, and orders them numerically.
 // The checksum covers exact file bytes, including comments and line endings.
 func Load(files fs.FS, dir string) ([]Migration, error) {
+	return LoadDialect(files, dir, "postgres")
+}
+
+// LoadDialect loads PostgreSQL or MySQL migration SQL without translating it.
+func LoadDialect(files fs.FS, dir, dialect string) ([]Migration, error) {
+	if dialect != "postgres" && dialect != "mysql" {
+		return nil, fmt.Errorf("unsupported migration dialect %q", dialect)
+	}
 	entries, err := fs.ReadDir(files, dir)
 	if err != nil {
 		return nil, err
@@ -45,17 +53,17 @@ func Load(files fs.FS, dir string) ([]Migration, error) {
 		if err != nil {
 			return nil, err
 		}
-		up, down, err := parse(string(data))
+		up, down, err := parse(string(data), dialect)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", entry.Name(), err)
 		}
-		result = append(result, Migration{Version: version, Name: parts[2], Up: up, Down: down, Checksum: fmt.Sprintf("%x", sha256.Sum256(data))})
+		result = append(result, Migration{Dialect: dialect, Version: version, Name: parts[2], Up: up, Down: down, Checksum: fmt.Sprintf("%x", sha256.Sum256(data))})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Version < result[j].Version })
 	return result, nil
 }
 
-func parse(source string) (string, string, error) {
+func parse(source string, dialect ...string) (string, string, error) {
 	var up, down strings.Builder
 	section := 0
 	for _, line := range strings.Split(strings.ReplaceAll(source, "\r\n", "\n"), "\n") {
@@ -90,7 +98,7 @@ func parse(source string) (string, string, error) {
 		return "", "", fmt.Errorf("both Up and Down markers are required")
 	}
 	for _, sql := range []string{up.String(), down.String()} {
-		if err := validateSQL(sql); err != nil {
+		if err := validateSQL(sql, dialect...); err != nil {
 			return "", "", err
 		}
 	}

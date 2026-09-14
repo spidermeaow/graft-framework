@@ -2,7 +2,7 @@
 
 **Write Routes. Migrate. Document. Ship.**
 
-Graft is a lean Go API framework with SQL-first PostgreSQL migrations, built-in
+Graft is a lean Go API framework with SQL-first PostgreSQL/MySQL migrations, built-in
 OpenAPI/Swagger documentation, and native deployment. It uses `net/http`,
 `http.ServeMux`, `database/sql`, `log/slog`, and the standard Go toolchain.
 There is no ORM, DI container, or required application architecture.
@@ -80,7 +80,7 @@ session manually. No machine-wide PATH or execution-policy change is made.
 The CLI can display version/help and run migration commands without Go installed.
 Generation with `--download=false` also works without Go. **Normal project setup,
 development and compilation require Go 1.26.6+.**
-Database commands need access to PostgreSQL. Only published application binaries
+Database commands need access to PostgreSQL or MySQL. Only published application binaries
 are independent of both Go and Graft.
 
 New projects use a versioned public Go module. No `.graft` directory, custom cache
@@ -94,7 +94,7 @@ before building. If building a standalone CLI manually, run
 The bundle includes the upstream Swagger UI license notices. Published binaries
 are currently unsigned; no Windows code-signing certificate is configured.
 
-Requires Go 1.26.6 or later. PostgreSQL is needed only for database applications
+Requires Go 1.26.6 or later. A database is needed only for database applications
 and migration commands.
 
 ### Install the Windows CLI
@@ -301,12 +301,12 @@ Flags: `--dir` (default migrations), `--timeout` (default 2m), and rollback
 `--step`. Flags precede positional arguments, e.g.
 `graft make:migration --dir db/migrations create_users_table`.
 
-Positive numeric versions sort numerically. Each migration's SQL and history row
+Positive numeric versions sort numerically. On PostgreSQL, each migration's SQL and history row
 commit together. A failed migration rolls back; earlier migrations in the same
 batch remain applied. Retrying skips them. Rollback without `--step` reverts the
 latest batch; a positive step reverts that many most-recent migrations.
 
-History is in `public.graft_migrations` with version, name, batch, executed_at,
+PostgreSQL history is in `public.graft_migrations` with version, name, batch, executed_at,
 execution_time (nanoseconds) and checksum. Applied files must not be renamed,
 edited, removed, or have their line endings changed. Add a new migration instead.
 Missing files, checksum changes, duplicate versions and out-of-order insertion
@@ -322,8 +322,8 @@ Migration file generation uses an exclusive `.graft-create.lock` in its director
 If a generator is force-killed, remove this lock only after ensuring no generator
 is running, then retry. This is separate from the database advisory lock.
 
-Do not put BEGIN/COMMIT/ROLLBACK in migration files: Graft owns transactions.
-Nontransactional SQL (such as CREATE INDEX CONCURRENTLY), psql meta-commands,
+Do not put BEGIN/COMMIT/ROLLBACK in migration files: Graft manages execution.
+On PostgreSQL, nontransactional SQL (such as CREATE INDEX CONCURRENTLY), psql meta-commands,
 and COPY FROM STDIN are not supported in v0.1. Migration files are trusted code.
 The framework does not run migrations on application startup.
 
@@ -331,6 +331,21 @@ For programmatic use, `migration.Load(fs, dir)` accepts disk or embedded files;
 `migration.Runner{Store: postgres.New(db)}` supplies Up, Status and Rollback.
 The caller owns `*sql.DB` and its driver. HTTP apps can use database/sql, pgx,
 sqlc or any other data-access approach independently of Graft.
+
+### MySQL
+
+All migration commands also support MySQL 8.0+ (tested on 8.4). Configure `.env`:
+
+```dotenv
+DATABASE_DRIVER=mysql
+DATABASE_URL=user:password@tcp(localhost:3306)/app
+```
+
+The CLI enables `parseTime=true`, `loc=UTC` and `multiStatements=true` for migrations.
+Omitting DATABASE_DRIVER keeps PostgreSQL behavior. SQL files are dialect-specific;
+Graft does not translate SQL or application queries. MySQL DDL is not transactional:
+failed/interrupted operations leave a **dirty** history marker and block further
+migration operations until repaired. See [MySQL setup and recovery](docs/MYSQL.md).
 
 ## OpenAPI and Swagger
 
@@ -405,7 +420,8 @@ CI runs these tests against a PostgreSQL service. Without the variable they skip
 
 See [ADRs](docs/adr), [dependency rationale and upstream licenses](docs/DEPENDENCIES.md),
 and [contributing conventions](CONTRIBUTING.md). The core HTTP package has no
-external Go dependencies. The CLI/example use one PostgreSQL driver.
+external Go dependencies. The CLI uses PostgreSQL and MySQL drivers; see
+[dependency decisions](docs/DEPENDENCIES.md).
 
 ## Production controls (v0.2 prerelease)
 

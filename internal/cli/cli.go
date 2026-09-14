@@ -17,12 +17,14 @@ import (
 
 	"github.com/spidermeaow/graft-framework"
 	"github.com/spidermeaow/graft-framework/internal/frameworkbundle"
+	"github.com/spidermeaow/graft-framework/licenses"
 )
 
 const usage = `Graft — Write Routes. Migrate. Document. Ship.
 
 Usage:
   graft version
+  graft licenses
   graft install [--dir path] [--no-path]
   graft new [--module name] [--framework local-path] [--version v0.1.0] project-name
   graft upgrade-project --version v0.1.0 [--apply]
@@ -34,7 +36,8 @@ Usage:
   graft migrate:status [--dir migrations] [--timeout 2m]
   graft migrate:rollback [--dir migrations] [--step N] [--timeout 2m]
 
-Migration commands use DATABASE_URL. Flags must precede positional arguments.
+Migration commands use DATABASE_DRIVER (postgres or mysql) and DATABASE_URL.
+PostgreSQL is the default. Flags must precede positional arguments.
 Publish targets: linux-x64, linux-arm64, windows-x64, windows-arm64, darwin-x64, darwin-arm64.
 `
 
@@ -46,6 +49,11 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	}
 	var err error
 	switch args[0] {
+	case "licenses":
+		if len(args) != 1 {
+			return errors.New("licenses takes no arguments")
+		}
+		_, err = io.WriteString(out, licenses.Text())
 	case "install":
 		err = installCommand(ctx, args[1:], out, errOut)
 	case "version", "--version", "-v":

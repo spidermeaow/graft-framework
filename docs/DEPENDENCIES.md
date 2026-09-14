@@ -1,17 +1,24 @@
 # Dependency decisions
 
-The root HTTP package, OpenAPI types, migration runner and PostgreSQL adapter use
+The root HTTP package, OpenAPI types, migration runner and database adapters use
 only Go's standard library. `go list -deps .` can verify this. The module also
-contains the CLI and PostgreSQL example, which use one external Go module:
+contains the CLI and database examples, which use these external modules:
 
 | Dependency | Scope | Reason | License |
 | --- | --- | --- | --- |
 | github.com/lib/pq | CLI, example, integration tests | Mature pure-Go database/sql PostgreSQL driver; implementing the wire protocol is outside Graft's scope | MIT |
+| github.com/go-sql-driver/mysql v1.10.1 | CLI, MySQL integration tests | Pure-Go database/sql MySQL protocol with context cancellation and multiple SQL statements | MPL-2.0 |
+| filippo.io/edwards25519 v1.2.0 | MySQL driver (indirect) | Upstream driver's authentication dependency | BSD-3-Clause |
 | swagger-ui-dist 5.32.15 | Embedded JS/CSS assets | Real Swagger UI with no browser CDN or server-side framework dependency | Apache-2.0 plus bundled notices |
 
 The PostgreSQL adapter accepts any compatible database/sql driver. pq is chosen
 for its focused SQL interface and pure-Go cross compilation. Versions and hashes
 are pinned in go.mod/go.sum; upgrade via normal Go module tooling.
+
+MySQL driver sources are unmodified. Its MPL-2.0 license does not change Graft's
+MIT license. Driver licenses and source URLs are in `licenses/`, embedded in
+`graft licenses`, and installed as THIRD_PARTY_NOTICES.txt by Windows Setup.
+Release archives also contain the license files.
 
 Swagger UI was obtained from the official npm distribution:
 https://registry.npmjs.org/swagger-ui-dist/-/swagger-ui-dist-5.32.15.tgz

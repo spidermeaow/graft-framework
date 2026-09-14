@@ -32,10 +32,10 @@ func validate(migrations []Migration, history []Record) ([]Migration, error) {
 		if _, ok := local[m.Version]; ok {
 			return nil, fmt.Errorf("duplicate migration version %d", m.Version)
 		}
-		if err := validateSQL(m.Up); err != nil {
+		if err := validateSQL(m.Up, m.Dialect); err != nil {
 			return nil, err
 		}
-		if err := validateSQL(m.Down); err != nil {
+		if err := validateSQL(m.Down, m.Dialect); err != nil {
 			return nil, err
 		}
 		local[m.Version] = m
@@ -70,7 +70,8 @@ func validate(migrations []Migration, history []Record) ([]Migration, error) {
 }
 
 // Up applies pending migrations in one new batch. Each migration commits separately;
-// on failure earlier successful migrations remain recorded and retries are safe.
+// on failure earlier successful migrations remain recorded. Nontransactional
+// stores can require manual repair before retrying a failed migration.
 func (r Runner) Up(ctx context.Context, migrations []Migration) error {
 	if r.Store == nil {
 		return fmt.Errorf("migration: nil store")

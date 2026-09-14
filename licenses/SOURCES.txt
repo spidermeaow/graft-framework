@@ -1,0 +1,16 @@
+Graft is MIT licensed. Third-party components retain their own licenses.
+The CLI includes the following unmodified Go modules:
+
+github.com/lib/pq v1.12.3 (MIT)
+Source: https://github.com/lib/pq/tree/v1.12.3
+
+github.com/go-sql-driver/mysql v1.10.1 (MPL-2.0)
+Source, including MPL-covered files:
+https://github.com/go-sql-driver/mysql/tree/v1.10.1
+Source archive: https://github.com/go-sql-driver/mysql/archive/refs/tags/v1.10.1.tar.gz
+
+filippo.io/edwards25519 v1.2.0 (BSD-3-Clause)
+Source: https://github.com/FiloSottile/edwards25519/tree/v1.2.0
+
+Corresponding license texts follow. Swagger UI notices are supplied separately
+in release archives and in the framework's internal/swaggerui/assets directory.

@@ -15,9 +15,11 @@ import (
 	"text/tabwriter"
 	"time"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq" // PostgreSQL wire protocol, kept out of the HTTP core.
 	"github.com/spidermeaow/graft-framework"
 	"github.com/spidermeaow/graft-framework/migration"
+	mysqlstore "github.com/spidermeaow/graft-framework/migration/mysql"
 	"github.com/spidermeaow/graft-framework/migration/postgres"
 )
 
@@ -54,11 +56,15 @@ func migrationCommand(ctx context.Context, command string, args []string, out, e
 	if *timeout <= 0 || steps < 0 {
 		return errors.New("timeout must be positive and step nonnegative")
 	}
-	migrations, err := migration.Load(os.DirFS(*dir), ".")
+	if err := graft.LoadEnv(); err != nil {
+		return err
+	}
+	dialect, err := migrationDriver(os.Getenv("DATABASE_DRIVER"))
 	if err != nil {
 		return err
 	}
-	if err := graft.LoadEnv(); err != nil {
+	migrations, err := migration.LoadDialect(os.DirFS(*dir), ".", dialect)
+	if err != nil {
 		return err
 	}
 	dsn := os.Getenv("DATABASE_URL")
@@ -67,12 +73,12 @@ func migrationCommand(ctx context.Context, command string, args []string, out, e
 	}
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
-	db, err := sql.Open("postgres", dsn)
+	db, store, err := openMigrationStore(dialect, dsn)
 	if err != nil {
-		return errors.New("invalid PostgreSQL connection configuration")
+		return err
 	}
 	defer db.Close()
-	runner := migration.Runner{Store: postgres.New(db), Logger: slog.New(slog.NewTextHandler(errOut, nil))}
+	runner := migration.Runner{Store: store, Logger: slog.New(slog.NewTextHandler(errOut, nil))}
 	switch command {
 	case "migrate":
 		err = runner.Up(ctx, migrations)
@@ -99,6 +105,41 @@ func migrationCommand(ctx context.Context, command string, args []string, out, e
 		fmt.Fprintln(out, "Migrations complete")
 	}
 	return err
+}
+
+func migrationDriver(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "postgres", "postgresql":
+		return "postgres", nil
+	case "mysql":
+		return "mysql", nil
+	default:
+		return "", errors.New("unsupported DATABASE_DRIVER; use postgres or mysql")
+	}
+}
+
+func openMigrationStore(dialect, dsn string) (*sql.DB, migration.Store, error) {
+	if dialect == "mysql" {
+		cfg, err := mysqldriver.ParseDSN(dsn)
+		if err != nil || cfg.DBName == "" {
+			return nil, nil, errors.New("invalid MySQL DATABASE_URL; expected user:password@tcp(host:3306)/database")
+		}
+		cfg.ParseTime, cfg.MultiStatements, cfg.Loc = true, true, time.UTC
+		connector, err := mysqldriver.NewConnector(cfg)
+		if err != nil {
+			return nil, nil, errors.New("invalid MySQL connection configuration")
+		}
+		db := sql.OpenDB(connector)
+		return db, mysqlstore.New(db), nil
+	}
+	if dialect != "postgres" {
+		return nil, nil, errors.New("unsupported DATABASE_DRIVER; use postgres or mysql")
+	}
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, nil, errors.New("invalid PostgreSQL connection configuration")
+	}
+	return db, postgres.New(db), nil
 }
 
 func makeMigration(dir, name string, now time.Time) (string, error) {

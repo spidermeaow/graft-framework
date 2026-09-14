@@ -1,4 +1,4 @@
-// Package migration runs ordered SQL-first migrations through a transactional Store.
+// Package migration runs ordered SQL-first migrations through a database Store.
 package migration
 
 import (
@@ -8,6 +8,8 @@ import (
 
 // Migration is an immutable SQL file parsed by Load.
 type Migration struct {
+	// Dialect selects SQL validation rules; empty means postgres.
+	Dialect  string
 	Version  int64
 	Name     string
 	Up       string
@@ -37,8 +39,9 @@ type Store interface {
 	WithLock(context.Context, func(Session) error) error
 }
 
-// Session is valid only inside WithLock. Apply and Revert must atomically execute
-// SQL and insert/delete its history row in the same transaction.
+// Session is valid only inside WithLock. Transactional stores atomically execute
+// SQL and update history. Nontransactional stores must persist a dirty marker
+// before execution and refuse further operations until a failure is repaired.
 type Session interface {
 	History(context.Context) ([]Record, error)
 	Apply(context.Context, Migration, int) (Record, error)

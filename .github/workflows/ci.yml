@@ -6,6 +6,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: graft_test
+          MYSQL_ROOT_HOST: '%'
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pgraft_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
       postgres:
         image: postgres:18
         env:
@@ -20,6 +31,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      GRAFT_TEST_MYSQL_DSN: root:graft_test@tcp(127.0.0.1:3306)/mysql
       GRAFT_TEST_DATABASE_URL: postgres://graft:graft_test@localhost:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

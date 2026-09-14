@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/spidermeaow/graft-framework/licenses"
 )
 
 func installCommand(ctx context.Context, args []string, out, errOut io.Writer) error {
@@ -47,6 +49,9 @@ func installCommand(ctx context.Context, args []string, out, errOut io.Writer) e
 		return err
 	}
 	fmt.Fprintln(out, "Installed:", target)
+	if err := os.WriteFile(filepath.Join(destination, "THIRD_PARTY_NOTICES.txt"), []byte(licenses.Text()), 0644); err != nil {
+		return fmt.Errorf("write third-party notices: %w", err)
+	}
 	if !*noPath {
 		if err := installUserPath(ctx, destination); err != nil {
 			return fmt.Errorf("executable installed, but User PATH update failed: %w", err)
