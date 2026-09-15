@@ -8,8 +8,19 @@ with Go's standard toolchain. It combines `net/http`, `http.ServeMux`,
 OpenAPI/Swagger documentation, and standalone application builds. There is no ORM,
 DI container, generated runtime, or required application architecture.
 
-Current release: **v0.3.0** · Go 1.26.6+ · Free and open source under the
-[MIT License](LICENSE).
+[Current release: **v0.3.0**](https://github.com/spidermeaow/graft-framework/releases/tag/v0.3.0)
+· Go 1.26.6+ · Free and open source under the [MIT License](LICENSE).
+
+Version 0.3.0 adds struct-driven API contracts. Define a DTO once, use
+`Body[T]`, `Response[T]`, `Path[T]`, `Query[T]`, or `QueryOptional[T]` beside the
+handler, and Graft generates matching OpenAPI schemas from Go types, `json` tags,
+and `validate` constraints. Authentication and other documented middleware merge
+their own security, parameter, and response metadata into the same operation.
+
+When upgrading code that uses manual response schemas, rename
+`Response(status, description, schema)` to
+`ResponseSchema(status, description, schema)`. The generic API now owns the
+`Response[T](status)` name.
 
 `graft new` asks whether a project uses PostgreSQL or MySQL and writes the matching
 `.env.example`. `graft dev`, `graft build` and `graft publish` cover the normal
@@ -18,8 +29,7 @@ that work with `go test`, `go build` and VS Code.
 
 Optional [Toolkits](docs/TOOLKITS.md) provide API key/JWT authentication,
 authorization, request validation, pagination, problem responses, and HTTP test
-helpers. Import them only where needed; existing applications keep working without
-changes.
+helpers. They remain opt-in and can be imported only where needed.
 
 Run `graft doctor` from a project to check the Go toolchain, dotenv syntax,
 runtime settings, local migrations, and—when `DATABASE_URL` is configured—the
@@ -187,7 +197,7 @@ before release. `new --module example.com/my-api` names the application module;
 `--version` selects a published framework version.
 
 For old embedded/local projects, see [migration and release instructions](docs/RELEASING.md).
-`graft upgrade-project --version v0.2.0` previews the migration; adding `--apply`
+`graft upgrade-project --version v0.3.0` previews the migration; adding `--apply`
 verifies, backs up and updates dependency files. Updating the CLI alone does not
 change the framework version pinned in a standard project's `go.mod`.
 
@@ -198,6 +208,8 @@ package main
 
 import (
     "log"
+    "strconv"
+
     "github.com/spidermeaow/graft-framework"
 )
 
@@ -216,12 +228,14 @@ func main() {
         return c.JSON(200, map[string]string{"message": "pong"})
     }, graft.Summary("Ping"), graft.Tag("Health"))
     app.Group("/api").GET("/users/{id}", func(c *graft.Context) error {
-        return c.JSON(200, map[string]string{"id": c.Param("id")})
+        id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+        if err != nil { return graft.NewHTTPError(400, "invalid user id") }
+        return c.JSON(200, UserResponse{ID: id})
     },
         graft.Summary("Get user"), graft.Tag("Users"),
         graft.Path[int64]("id"),
         graft.Response[UserResponse](200),
-        graft.Response[ErrorResponse](404),
+        graft.Response[ErrorResponse](400),
     )
     app.Docs("My API", "0.1.0")
     if err := app.Run(":8080"); err != nil {
@@ -245,12 +259,17 @@ handler errors use the configured Graft error handler.
 
 `c.Param`, `c.Query` and `c.Header` read request data. `c.Request()`,
 `c.Response()` and `c.Context()` expose standard Go primitives. JSON structures
-are application-owned; no response envelope is required.
+are application-owned; no response envelope is required. With
+`github.com/spidermeaow/graft-framework/toolkit/validate` imported as `validate`:
 
 ```go
-var input struct { Name string `json:"name"` }
-if err := c.Bind(&input); err != nil { return err }
-if input.Name == "" { return graft.NewHTTPError(400, "name is required") }
+type CreateUserRequest struct {
+    Name  string `json:"name" validate:"required,min=3,max=80"`
+    Email string `json:"email" validate:"required,email"`
+}
+
+var input CreateUserRequest
+if err := validate.Bind(c, &input); err != nil { return err }
 return c.JSON(201, input)
 ```
 
@@ -273,8 +292,8 @@ Use a custom http.Server for TLS or different streaming/timeouts requirements.
 
 ## Optional API Toolkits
 
-The Toolkits introduced in `v0.2.5` are ordinary Go packages under `toolkit/`. For example, an
-API key can protect a route and describe that requirement in Swagger:
+Toolkits are ordinary Go packages under `toolkit/`. For example, an API key can
+protect a route and describe that requirement in Swagger:
 
 ```go
 package main
@@ -437,8 +456,7 @@ Graft does not translate SQL or application queries. MySQL DDL is not transactio
 failed/interrupted operations leave a **dirty** history marker and block further
 migration operations until repaired. Use `graft migrate:doctor` to inspect the
 failure and `graft migrate:repair --mark-pending VERSION --plan` to preview a
-history correction after restoring the database. These recovery commands have
-been available since v0.2.4. See
+history correction after restoring the database. See
 [MySQL setup and recovery](docs/MYSQL.md).
 
 ## OpenAPI and Swagger
@@ -541,11 +559,10 @@ external Go dependencies. The CLI uses PostgreSQL and MySQL drivers; see
 Graft includes opt-in `ConcurrencyLimit`, `BodyLimit`, `RequestDeadline`, a
 process-local `RateLimit`, bounded `Metrics`, `Health` and configurable server
 shutdown through `RunWithConfig`/`ServeWithConfig`. `DocsWithMiddleware` protects
-the spec and all Swagger assets. Existing method signatures remain available.
+the spec and all Swagger assets.
 
-New v0.2 applications bind to loopback and enable docs only in dev unless configured
-otherwise. Explicit v0.1.x scaffolds preserve their legacy behavior. Updating a
-module does not rewrite existing application code.
+Generated applications bind to loopback and enable docs only in development unless
+configured otherwise. Updating a module does not rewrite existing application code.
 
 Start with the [production and migration guide](docs/PRODUCTION.md), then run the
 [repeatable load harness](internal/cmd/loadtest/main.go) against a staging workload.
