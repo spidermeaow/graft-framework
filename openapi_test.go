@@ -12,7 +12,7 @@ import (
 func TestOpenAPI(t *testing.T) {
 	a := New()
 	schema := openapi.Schema{Type: "object", Properties: map[string]openapi.Schema{"name": {Type: "string"}}, Required: []string{"name"}}
-	a.Group("/api").POST("/users/{id}", func(c *Context) error { return c.JSON(201, nil) }, Summary("Create user"), Tag("Users"), RequestBody(schema), Response(201, "Created", schema), PathParameter("id", openapi.Schema{Type: "integer"}), QueryParameter("notify", false, openapi.Schema{Type: "boolean"}))
+	a.Group("/api").POST("/users/{id}", func(c *Context) error { return c.JSON(201, nil) }, Summary("Create user"), Tag("Users"), RequestBody(schema), ResponseSchema(201, "Created", schema), PathParameter("id", openapi.Schema{Type: "integer"}), QueryParameter("notify", false, openapi.Schema{Type: "boolean"}))
 	schema.Properties["name"] = openapi.Schema{Type: "number"}
 	a.GET("/{$}", func(*Context) error { return nil })
 	a.Docs("Test API", "1.0")

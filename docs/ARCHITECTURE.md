@@ -8,7 +8,7 @@ only the parts they use.
 | --- | --- | --- |
 | HTTP core | `app.go`, `context.go`, `route.go`, `server.go` | Routes, request/response helpers, and server lifecycle |
 | Runtime middleware | `middleware.go`, `limits.go`, `metrics.go` | Request protection, limits, and metrics |
-| OpenAPI | `openapi.go`, `openapi_metadata.go`, `openapi_metadata_merge.go`, `openapi_security.go`, `swagger.go` | Document generation, metadata API and merge rules, embedded UI |
+| OpenAPI | `openapi.go`, `contract.go`, `schema_reflect.go`, `openapi_metadata.go`, `openapi_metadata_merge.go`, `openapi_security.go`, `swagger.go` | Generic contracts, schema inference, document generation, metadata merge rules, embedded UI |
 | SQL migrations | `migration/`, `migration/postgres/`, `migration/mysql/` | SQL parsing, execution, history, and recovery |
 | CLI | `internal/cli/` | Project generation, build/publish, doctor, and migration commands |
 | Optional toolkits | `toolkit/` | Auth, validation, API helpers, and test helpers |
@@ -18,7 +18,7 @@ OpenAPI route metadata is frozen when a route is registered. The generator in
 validates references. The merge policy is in `openapi_metadata_merge.go` and
 security combination is in `openapi_security.go`; runtime middleware remains
 independent of the generator. See [OpenAPI metadata](OPENAPI_METADATA.md) for the
-public extension API.
+public extension API and [API contracts](API_CONTRACTS.md) for struct-driven schemas.
 
 The migration CLI keeps command coordination in `internal/cli/migration.go`.
 Connection selection, local file generation, and dirty-state inspection are in

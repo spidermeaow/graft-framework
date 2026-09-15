@@ -95,8 +95,9 @@ func RequestBody(schema openapi.Schema) RouteOption {
 	}
 }
 
-// Response documents a JSON response. A zero Schema documents a bodyless response.
-func Response(status int, description string, schema openapi.Schema) RouteOption {
+// ResponseSchema documents a JSON response using a manually defined schema.
+// A zero Schema documents a bodyless response.
+func ResponseSchema(status int, description string, schema openapi.Schema) RouteOption {
 	if status < 100 || status > 599 {
 		panic("graft: invalid response status")
 	}

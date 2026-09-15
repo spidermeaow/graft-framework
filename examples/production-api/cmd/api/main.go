@@ -14,7 +14,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/spidermeaow/graft-framework"
-	"github.com/spidermeaow/graft-framework/openapi"
+	"github.com/spidermeaow/graft-framework/toolkit/validate"
 )
 
 type machine struct {
@@ -24,13 +24,14 @@ type machine struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 type createMachine struct {
-	Name string `json:"name"`
+	Name string `json:"name" validate:"required,min=1,max=100"`
 }
-
-var machineSchema = openapi.Schema{Type: "object", Required: []string{"id", "name", "status", "created_at"}, Properties: map[string]openapi.Schema{
-	"id": {Type: "integer", Format: "int64"}, "name": {Type: "string"}, "status": {Type: "string", Enum: []string{"ready", "offline"}}, "created_at": {Type: "string", Format: "date-time"},
-}}
-var errorSchema = openapi.Schema{Type: "object", Properties: map[string]openapi.Schema{"error": {Type: "string"}}}
+type errorResponse struct {
+	Error string `json:"error"`
+}
+type healthResponse struct {
+	Status string `json:"status"`
+}
 
 func application(db *sql.DB, cfg appConfig, health *graft.Health, metrics *graft.Metrics) *graft.App {
 	app := graft.New()
@@ -51,7 +52,7 @@ func application(db *sql.DB, cfg appConfig, health *graft.Health, metrics *graft
 			return graft.NewHTTPError(503, "database unavailable")
 		}
 		return c.JSON(200, map[string]string{"status": "ok"})
-	}, graft.Summary("Database readiness"), graft.Response(200, "Ready", openapi.Schema{Type: "object"}), graft.Response(503, "Unavailable", errorSchema))
+	}, graft.Summary("Database readiness"), graft.Response[healthResponse](200), graft.Response[errorResponse](503))
 	admission := graft.ConcurrencyLimit(cfg.runtime.MaxConcurrent)
 	rate := graft.RateLimit(cfg.rate, cfg.burst)
 	api := app.Group("/api", authorize(cfg), rate, admission, graft.BodyLimit(cfg.runtime.MaxBodyBytes), graft.RequestDeadline(cfg.runtime.RequestTimeout))
@@ -91,7 +92,7 @@ func application(db *sql.DB, cfg appConfig, health *graft.Health, metrics *graft
 			return databaseError(ctx, err)
 		}
 		return c.JSON(200, items)
-	}, graft.Summary("List machines"), graft.Tag("Machines"), graft.QueryParameter("limit", false, openapi.Schema{Type: "integer", Description: "1 to 100; default 100"}), graft.QueryParameter("after_id", false, openapi.Schema{Type: "integer", Format: "int64", Description: "Last ID from the previous page"}), graft.Response(200, "Machines", openapi.Schema{Type: "array", Items: &machineSchema}), graft.Response(400, "Invalid limit", errorSchema))
+	}, graft.Summary("List machines"), graft.Tag("Machines"), graft.QueryOptional[int]("limit"), graft.QueryOptional[int64]("after_id"), graft.Response[[]machine](200), graft.Response[errorResponse](400))
 	api.GET("/machines/{id}", func(c *graft.Context) error {
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil || id <= 0 {
@@ -108,10 +109,10 @@ func application(db *sql.DB, cfg appConfig, health *graft.Health, metrics *graft
 			return databaseError(ctx, err)
 		}
 		return c.JSON(200, m)
-	}, graft.Summary("Get machine"), graft.Tag("Machines"), graft.PathParameter("id", openapi.Schema{Type: "integer", Format: "int64"}), graft.Response(200, "Machine", machineSchema), graft.Response(400, "Invalid ID", errorSchema), graft.Response(404, "Not found", errorSchema))
+	}, graft.Summary("Get machine"), graft.Tag("Machines"), graft.Path[int64]("id"), graft.Response[machine](200), graft.Response[errorResponse](400), graft.Response[errorResponse](404))
 	api.POST("/machines", func(c *graft.Context) error {
 		var body createMachine
-		if err := c.Bind(&body); err != nil {
+		if err := validate.Bind(c, &body); err != nil {
 			return err
 		}
 		body.Name = strings.TrimSpace(body.Name)
@@ -131,7 +132,7 @@ func application(db *sql.DB, cfg appConfig, health *graft.Health, metrics *graft
 		}
 		c.Response().Header().Set("Location", "/api/machines/"+strconv.FormatInt(m.ID, 10))
 		return c.JSON(http.StatusCreated, m)
-	}, graft.Summary("Create machine"), graft.Tag("Machines"), graft.RequestBody(openapi.Schema{Type: "object", Required: []string{"name"}, Properties: map[string]openapi.Schema{"name": {Type: "string"}}}), graft.Response(201, "Created", machineSchema), graft.Response(400, "Invalid request", errorSchema), graft.Response(409, "Duplicate name", errorSchema))
+	}, graft.Summary("Create machine"), graft.Tag("Machines"), graft.Body[createMachine](), graft.Response[machine](201), graft.Response[errorResponse](400), graft.Response[errorResponse](409))
 	if cfg.runtime.Docs {
 		app.DocsWithMiddleware("Graft Machines API", "0.2.0", authorize(cfg), rate, admission, graft.RequestDeadline(cfg.runtime.RequestTimeout))
 	}

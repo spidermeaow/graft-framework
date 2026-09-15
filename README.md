@@ -8,7 +8,7 @@ with Go's standard toolchain. It combines `net/http`, `http.ServeMux`,
 OpenAPI/Swagger documentation, and standalone application builds. There is no ORM,
 DI container, generated runtime, or required application architecture.
 
-Current release: **v0.2.6** · Go 1.26.6+ · Free and open source under the
+Current release: **v0.3.0** · Go 1.26.6+ · Free and open source under the
 [MIT License](LICENSE).
 
 `graft new` asks whether a project uses PostgreSQL or MySQL and writes the matching
@@ -31,7 +31,7 @@ Install Go 1.26.6 or newer on the development machine. Choose either the Windows
 Setup from [GitHub Releases](https://github.com/spidermeaow/graft-framework/releases/latest) or:
 
 ```sh
-go install github.com/spidermeaow/graft-framework/cmd/graft@v0.2.6
+go install github.com/spidermeaow/graft-framework/cmd/graft@v0.3.0
 graft new my-api
 cd my-api
 graft dev
@@ -44,7 +44,7 @@ directory to PATH if `graft` is not found after `go install`.
 To use only the library in an existing Go module:
 
 ```sh
-go get github.com/spidermeaow/graft-framework@v0.2.6
+go get github.com/spidermeaow/graft-framework@v0.3.0
 ```
 
 For framework development, use `graft new --framework <absolute-checkout-path> my-api`.
@@ -138,11 +138,11 @@ If your organization's policy blocks PowerShell scripts, use the manual build
 below and add its binary directory to your user PATH through Windows settings.
 
 `graft version` (also `--version` or `-v`) reports the CLI version, Go version and
-platform. Local development builds report `0.2.6-dev`; published `go install`
+platform. Local development builds report `0.3.0-dev`; published `go install`
 builds use their module version. Release builds may set it explicitly:
 
 ```powershell
-go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.2.6" -o bin/graft.exe ./cmd/graft
+go build -ldflags "-X github.com/spidermeaow/graft-framework/internal/cli.Version=0.3.0" -o bin/graft.exe ./cmd/graft
 ```
 
 Re-run the installer after updating this checkout. `-InstallDir <path>` changes
@@ -201,6 +201,14 @@ import (
     "github.com/spidermeaow/graft-framework"
 )
 
+type UserResponse struct {
+    ID int64 `json:"id"`
+}
+
+type ErrorResponse struct {
+    Error string `json:"error"`
+}
+
 func main() {
     app := graft.New()
     app.Use(graft.RequestID(), graft.Logger(), graft.Recovery())
@@ -209,7 +217,12 @@ func main() {
     }, graft.Summary("Ping"), graft.Tag("Health"))
     app.Group("/api").GET("/users/{id}", func(c *graft.Context) error {
         return c.JSON(200, map[string]string{"id": c.Param("id")})
-    })
+    },
+        graft.Summary("Get user"), graft.Tag("Users"),
+        graft.Path[int64]("id"),
+        graft.Response[UserResponse](200),
+        graft.Response[ErrorResponse](404),
+    )
     app.Docs("My API", "0.1.0")
     if err := app.Run(":8080"); err != nil {
         log.Fatal(err)
@@ -299,7 +312,7 @@ for explicit documentation but does not add runtime authentication.
 
 For JSON DTOs, import `github.com/spidermeaow/graft-framework/toolkit/validate`.
 `validate.Bind` combines Graft's strict JSON binder with
-`required`, `min=N`, and `max=N` struct tags:
+`required`, `email`, `min=N`, and `max=N` struct tags:
 
 ```go
 type CreateItem struct {
@@ -432,28 +445,44 @@ been available since v0.2.4. See
 
 Call `app.Docs("API name", "0.1.0")` to enable docs. Swagger UI assets are embedded
 and need no CDN, Node runtime, or separate server. There is no remote validator.
-Describe schemas explicitly using `github.com/spidermeaow/graft-framework/openapi`:
+For common endpoints, define the contract once with Go structs and concise generic
+route options:
 
 ```go
-schema := openapi.Schema{
-    Type: "object",
-    Properties: map[string]openapi.Schema{"name": {Type: "string"}},
-    Required: []string{"name"},
+type CreateUserRequest struct {
+    Name  string `json:"name" validate:"required,min=3,max=80"`
+    Email string `json:"email" validate:"required,email"`
 }
+type UserResponse struct {
+    ID    int64  `json:"id"`
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
 app.POST("/users", createUser,
     graft.Summary("Create user"), graft.Tag("Users"),
-    graft.RequestBody(schema), graft.Response(201, "Created", schema),
+    graft.Body[CreateUserRequest](),
+    graft.Response[UserResponse](201),
+    graft.Response[ErrorResponse](400),
 )
 ```
 
-Additional metadata: Description, QueryParameter, PathParameter and Security. Path
-parameters are discovered as required strings unless overridden. Schemas document
-the API; they do not validate request bodies. `app.OpenAPI(title, version)` exports
-JSON without serving it. Catch-all `{path...}` routes work for HTTP but are rejected
-by OpenAPI generation, since OpenAPI cannot describe them faithfully.
-Documentation endpoints currently assume the app is mounted at the origin root.
-See [context-aware OpenAPI metadata](docs/OPENAPI_METADATA.md) for middleware and
-route providers, merge rules, shared components and custom security drivers.
+`Body[T]`, `Response[T]`, `Path[T]`, `Query[T]`, and `QueryOptional[T]` infer JSON
+types, formats, required fields, lengths, numeric bounds, and email format from T.
+Use `ResponseDescription[T]` when the standard HTTP status description is not enough.
+Schemas document the API; enforce the same tags at runtime with `validate.Bind`.
+
+Manual `openapi.Schema` remains available through `RequestBody`, `ResponseSchema`,
+`QueryParameter`, `PathParameter`, and the other metadata APIs for advanced cases.
+Path parameters are discovered as required strings unless overridden. See
+[struct-driven API contracts](docs/API_CONTRACTS.md) for supported types and tags,
+and [context-aware OpenAPI metadata](docs/OPENAPI_METADATA.md) for middleware,
+merge rules, shared components, and custom security drivers.
+
+`app.OpenAPI(title, version)` exports JSON without serving it. Catch-all
+`{path...}` routes work for HTTP but are rejected by OpenAPI generation, since
+OpenAPI cannot describe them faithfully. Documentation endpoints currently assume
+the app is mounted at the origin root.
 
 ## Build and publish
 

@@ -4,11 +4,13 @@ package validate
 import (
 	"errors"
 	"fmt"
+	"net/mail"
 	"reflect"
-	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/spidermeaow/graft-framework"
+	"github.com/spidermeaow/graft-framework/internal/validationrules"
 )
 
 // FieldError describes a public validation failure without echoing input values.
@@ -23,8 +25,8 @@ type Errors []FieldError
 
 func (e Errors) Error() string { return fmt.Sprintf("%d validation error(s)", len(e)) }
 
-// Check supports required, min=N and max=N tags. Length applies to strings,
-// slices and maps; min/max apply numerically to integer fields.
+// Check supports required, email, min=N and max=N tags. Length applies to
+// strings, slices and maps; min/max apply numerically to numeric fields.
 func Check(value any) error {
 	v := reflect.ValueOf(value)
 	for v.IsValid() && v.Kind() == reflect.Pointer {
@@ -62,41 +64,74 @@ func check(v reflect.Value, prefix string, failures *Errors) {
 			name = prefix + "." + name
 		}
 		value := v.Field(i)
-		for _, rule := range strings.Split(field.Tag.Get("validate"), ",") {
-			if rule == "" {
-				continue
-			}
-			if rule == "required" {
+		rules, err := validationrules.Parse(field.Tag.Get("validate"))
+		if err != nil {
+			*failures = append(*failures, FieldError{name, "unsupported rule"})
+			continue
+		}
+		for _, rule := range rules {
+			if rule.Name == "required" {
 				if value.IsZero() {
-					*failures = append(*failures, FieldError{name, rule})
+					*failures = append(*failures, FieldError{name, rule.Raw})
 				}
 				continue
 			}
-			operator, raw, ok := strings.Cut(rule, "=")
-			if !ok || (operator != "min" && operator != "max") {
-				*failures = append(*failures, FieldError{name, "unsupported rule"})
+			if rule.Name == "email" {
+				actual, ok := indirectValue(value)
+				if !ok {
+					continue
+				}
+				if actual.Kind() != reflect.String {
+					*failures = append(*failures, FieldError{name, "unsupported rule"})
+					continue
+				}
+				raw := actual.String()
+				address, err := mail.ParseAddress(raw)
+				if err != nil || address.Address != raw || !strings.Contains(raw, "@") {
+					*failures = append(*failures, FieldError{name, rule.Raw})
+				}
 				continue
 			}
-			limit, err := strconv.ParseInt(raw, 10, 64)
-			if err != nil || limit < 0 {
-				*failures = append(*failures, FieldError{name, "unsupported rule"})
+			actual, ok := indirectValue(value)
+			if !ok {
 				continue
 			}
-			var size int64
-			switch value.Kind() {
-			case reflect.String, reflect.Slice, reflect.Map, reflect.Array:
-				size = int64(value.Len())
+			failed := false
+			switch actual.Kind() {
+			case reflect.String:
+				size := int64(utf8.RuneCountInString(actual.String()))
+				failed = rule.Name == "min" && size < rule.Value || rule.Name == "max" && size > rule.Value
+			case reflect.Slice, reflect.Map, reflect.Array:
+				size := int64(actual.Len())
+				failed = rule.Name == "min" && size < rule.Value || rule.Name == "max" && size > rule.Value
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				size = value.Int()
+				number := actual.Int()
+				failed = rule.Name == "min" && number < rule.Value || rule.Name == "max" && number > rule.Value
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+				number := actual.Uint()
+				failed = rule.Name == "min" && number < uint64(rule.Value) || rule.Name == "max" && number > uint64(rule.Value)
+			case reflect.Float32, reflect.Float64:
+				number := actual.Float()
+				failed = rule.Name == "min" && number < float64(rule.Value) || rule.Name == "max" && number > float64(rule.Value)
 			default:
 				*failures = append(*failures, FieldError{name, "unsupported rule"})
 				continue
 			}
-			if operator == "min" && size < limit || operator == "max" && size > limit {
-				*failures = append(*failures, FieldError{name, rule})
+			if failed {
+				*failures = append(*failures, FieldError{name, rule.Raw})
 			}
 		}
 	}
+}
+
+func indirectValue(value reflect.Value) (reflect.Value, bool) {
+	for value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return reflect.Value{}, false
+		}
+		value = value.Elem()
+	}
+	return value, true
 }
 
 // Bind checks one JSON body and returns 400 for validation failures.

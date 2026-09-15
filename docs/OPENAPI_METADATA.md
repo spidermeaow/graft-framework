@@ -8,8 +8,10 @@ OpenAPI shape and runtime behavior.
 
 ## Attach metadata to a route
 
-Existing options such as `graft.Summary`, `graft.Tag`, `graft.RequestBody` and
-`graft.Response` still work. New options include `HeaderParameter`,
+Concise struct-driven options such as `graft.Body[T]`, `graft.Response[T]`,
+`graft.Path[T]`, `graft.Query[T]`, and `graft.QueryOptional[T]` can infer common
+schemas. Manual options such as `graft.RequestBody` and `graft.ResponseSchema`
+remain available. Other options include `HeaderParameter`,
 `RequestContent`, `OperationID`, `Deprecated`, `SecurityScheme`, and `Metadata`.
 Use `Metadata` when a handler or another package supplies several fields:
 
@@ -116,8 +118,8 @@ Explicit route options can override scalar fields and response descriptions.
 Tags, identical parameters, responses and component definitions are deduplicated.
 Conflicting component definitions or request/parameter schemas cause `OpenAPI`
 to return an error. The first middleware response for a status wins unless an
-explicit route `Response` option overrides it. Multiple middleware security
-requirements are combined with AND; alternatives declared within one provider's
+explicit route `Response` or `ResponseSchema` option overrides it. Multiple
+middleware security requirements are combined with AND; alternatives declared within one provider's
 `Security` slice remain OR alternatives. A security requirement must reference a
 registered scheme. Metadata is snapshotted when the route is registered, so later
 changes to provider maps do not silently alter the document.

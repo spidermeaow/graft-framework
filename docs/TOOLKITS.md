@@ -33,7 +33,8 @@ ones. `auth.Required` attaches security and 401 metadata automatically; see the
 
 ```go
 type CreateItem struct {
-    Name string `json:"name" validate:"required,min=3,max=80"`
+    Name  string `json:"name" validate:"required,min=3,max=80"`
+    Email string `json:"email" validate:"required,email"`
 }
 func createItem(c *graft.Context) error {
     var input CreateItem
@@ -42,9 +43,11 @@ func createItem(c *graft.Context) error {
 }
 ```
 
-`min` and `max` count bytes for strings, element counts for slices/maps, and
-numeric values for integers. Unsupported rules fail validation; use a custom
-validator for domain-specific checks.
+`min` and `max` count Unicode characters for strings, element counts for slices/maps, and
+numeric values for numeric fields. `email` validates string email addresses.
+The same tags generate matching constraints when the DTO is used with
+`graft.Body[T]`; see [struct-driven API contracts](API_CONTRACTS.md). Unsupported
+rules fail validation; use a custom validator for domain-specific checks.
 
 ## API and tests
 

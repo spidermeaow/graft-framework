@@ -14,7 +14,7 @@ func TestVersionCommand(t *testing.T) {
 		if err := Run(context.Background(), []string{command}, &output, io.Discard); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(output.String(), "Graft 0.2.6-dev (go") {
+		if !strings.HasPrefix(output.String(), "Graft 0.3.0-dev (go") {
 			t.Fatalf("unexpected version: %q", output.String())
 		}
 	}

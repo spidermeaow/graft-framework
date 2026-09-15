@@ -12,11 +12,15 @@ import (
 func TestCheckAndBind(t *testing.T) {
 	type input struct {
 		Name  string `json:"name" validate:"required,min=3,max=10"`
+		Email string `json:"email" validate:"required,email"`
 		Count int    `json:"count" validate:"min=1"`
 	}
 	var fields Errors
-	if err := Check(input{Name: "x"}); !errors.As(err, &fields) || len(fields) != 2 {
+	if err := Check(input{Name: "x", Email: "not-an-email"}); !errors.As(err, &fields) || len(fields) != 3 {
 		t.Fatal(err)
+	}
+	if err := Check(input{Name: "กขค", Email: "dev@example.com", Count: 1}); err != nil {
+		t.Fatal("string bounds must count Unicode characters:", err)
 	}
 	a := graft.New()
 	a.POST("/", func(c *graft.Context) error {
@@ -26,14 +30,14 @@ func TestCheckAndBind(t *testing.T) {
 		}
 		return c.JSON(200, body)
 	})
-	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"abc","count":2}`))
+	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"abc","email":"dev@example.com","count":2}`))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	a.ServeHTTP(w, r)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	r = httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"x","count":0}`))
+	r = httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"x","email":"bad","count":0}`))
 	r.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	a.ServeHTTP(w, r)

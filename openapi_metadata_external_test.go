@@ -139,7 +139,7 @@ func TestMetadataMergeComponentsAndConflicts(t *testing.T) {
 		ComponentParameters: map[string]graft.OpenAPIParameter{"Tenant": {Name: "X-Tenant", In: "header", Schema: openapi.Schema{Type: "string"}}},
 		Schemas:             map[string]openapi.Schema{"Upload": {Type: "object"}},
 	}}
-	a.POST("/upload", h, graft.Metadata(provider), graft.Metadata(provider), graft.ParameterReference("Tenant"), graft.ResponseReference(422, "BadRequest"), graft.Response(201, "Created", openapi.Schema{Ref: "#/components/schemas/Upload"}))
+	a.POST("/upload", h, graft.Metadata(provider), graft.Metadata(provider), graft.ParameterReference("Tenant"), graft.ResponseReference(422, "BadRequest"), graft.ResponseSchema(201, "Created", openapi.Schema{Ref: "#/components/schemas/Upload"}))
 	doc := spec(t, a)
 	op := operation(t, doc, "/upload", "post")
 	if op["requestBody"].(map[string]any)["content"].(map[string]any)["multipart/form-data"] == nil {
@@ -176,7 +176,7 @@ func TestMultipleSecurityRequirementsUseAND(t *testing.T) {
 	key := auth.APIKey("0123456789abcdef", auth.Principal{Subject: "service"})
 	g := a.Group("/private")
 	g.UseDocumented(auth.Required(jwt))
-	g.GET("/both", h, graft.With(auth.Required(key)), graft.Response(200, "OK", openapi.Schema{}))
+	g.GET("/both", h, graft.With(auth.Required(key)), graft.ResponseSchema(200, "OK", openapi.Schema{}))
 	doc := spec(t, a)
 	security := operation(t, doc, "/private/both", "get")["security"].([]any)
 	if len(security) != 1 {

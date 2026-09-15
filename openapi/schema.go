@@ -8,6 +8,14 @@ type Schema struct {
 	Type                 string            `json:"type,omitempty"`
 	Format               string            `json:"format,omitempty"`
 	Description          string            `json:"description,omitempty"`
+	Minimum              *float64          `json:"minimum,omitempty"`
+	Maximum              *float64          `json:"maximum,omitempty"`
+	MinLength            *int              `json:"minLength,omitempty"`
+	MaxLength            *int              `json:"maxLength,omitempty"`
+	MinItems             *int              `json:"minItems,omitempty"`
+	MaxItems             *int              `json:"maxItems,omitempty"`
+	MinProperties        *int              `json:"minProperties,omitempty"`
+	MaxProperties        *int              `json:"maxProperties,omitempty"`
 	Properties           map[string]Schema `json:"properties,omitempty"`
 	Required             []string          `json:"required,omitempty"`
 	Items                *Schema           `json:"items,omitempty"`

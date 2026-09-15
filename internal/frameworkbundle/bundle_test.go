@@ -12,7 +12,7 @@ func TestExtractAndBuild(t *testing.T) {
 	if err := Extract(dir); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"go.mod", "app.go", "migration/postgres/postgres.go", "toolkit/auth/auth.go", "toolkit/validate/validate.go", "toolkit/api/api.go", "toolkit/testkit/testkit.go", "internal/swaggerui/assets/LICENSE", "internal/swaggerui/assets/swagger-ui-bundle.js"} {
+	for _, path := range []string{"go.mod", "app.go", "schema_reflect.go", "migration/postgres/postgres.go", "toolkit/auth/auth.go", "toolkit/validate/validate.go", "toolkit/api/api.go", "toolkit/testkit/testkit.go", "internal/validationrules/rules.go", "internal/swaggerui/assets/LICENSE", "internal/swaggerui/assets/swagger-ui-bundle.js"} {
 		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
 			t.Fatal(err)
 		}

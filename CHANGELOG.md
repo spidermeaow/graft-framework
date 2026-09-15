@@ -1,7 +1,15 @@
 # Changelog
 
-## Unreleased
+## v0.3.0
 
+- Added struct-driven OpenAPI schema inference and concise generic route contracts:
+  `Body[T]`, `Response[T]`, `Path[T]`, `Query[T]`, and `QueryOptional[T]`.
+- Shared `required`, `email`, `min` and `max` tag parsing between inferred OpenAPI
+  schemas and the validation toolkit; manual schemas remain available through
+  `RequestBody`, `ResponseSchema`, `PathParameter`, and `QueryParameter`.
+- Renamed the manual `Response(status, description, schema)` route option to
+  `ResponseSchema`; this makes the requested `Response[T](status)` syntax possible
+  because Go has no function overloading.
 - Organized OpenAPI metadata, security merge, Swagger serving, and migration CLI
   helpers by responsibility without changing the public API or runtime behavior.
 
